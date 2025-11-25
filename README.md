@@ -2,7 +2,7 @@
 
 Python-based FastAPI backend with a minimal web UI for testing local LLM models.
 
-Current implementation uses a **stubbed local LLM service** so you can develop the UI and flow before plugging in a real local model runtime (e.g., Ollama, llama.cpp, LM Studio, or in-process `transformers`).
+Current implementation uses **LM Studio** as the local LLM runtime via its OpenAI-compatible HTTP API.
 
 ## Requirements
 
@@ -58,11 +58,13 @@ uvicorn app.main:app
 
 Then open `http://127.0.0.1:8000/` in your browser.
 
-## Replacing the stub with a real local LLM
+## Local LLM integration (LM Studio)
 
-- Implement real generation logic in `app/models/service.py` inside `LocalLLMService.generate`.
-- Option 1: call an external local server (e.g., Ollama HTTP API).
-- Option 2: load a model in-process (e.g., `llama-cpp-python` or HuggingFace `transformers`).
+This project is already wired to use LM Studio as the local LLM runtime.
 
-The UI and API contract (`/api/generate`) remain the same; only the internals of `LocalLLMService` need to change.
+- The generation logic lives in `app/models/service.py` inside `LocalLLMService.generate`.
+- Requests are sent to LM Studio's OpenAI-compatible HTTP API (`/v1/chat/completions` and `/v1/models/`).
+- Agents (`AgentConfig`) control the system instructions, default model, max tokens, and temperature.
+
+If you want to switch to a different local backend (e.g., Ollama or an in-process `transformers` model), you only need to change the internals of `LocalLLMService` while keeping the `/api/generate` API contract the same.
 
