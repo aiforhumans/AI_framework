@@ -16,6 +16,7 @@
         <button class="tab-button" data-tab="prompt-builder-tab">Prompt Builder</button>
         <button class="tab-button" data-tab="ab-tester-tab">A/B Tester</button>
         <button class="tab-button" data-tab="evaluation-tab">Evaluation</button>
+        <button class="tab-button" data-tab="orchestrator-tab">Orchestrator</button>
         <button class="tab-button" data-tab="tools-tab">Tools</button>
       </nav>
 
@@ -507,6 +508,145 @@
               </label>
               <button type="button" id="prompt-template-apply-btn">Apply to Playground</button>
               <pre id="prompt-template-preview"></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="orchestrator-tab" class="tab-panel">
+        <h2>Agent Orchestrator</h2>
+        <p class="helper-text">Design and run multi-step agent workflows with conditional logic and tool integration.</p>
+
+        <div class="orchestrator-layout">
+          <!-- Left: Workflows List -->
+          <div class="orchestrator-sidebar">
+            <div class="workflows-list">
+              <h3>Workflows</h3>
+              <table id="workflows-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Nodes</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+              <button type="button" id="workflow-new-btn">New Workflow</button>
+            </div>
+
+            <div class="workflow-runs-list">
+              <h3>Run History</h3>
+              <div id="workflow-runs-container"></div>
+            </div>
+          </div>
+
+          <!-- Middle: Workflow Editor -->
+          <div class="orchestrator-editor">
+            <div class="workflow-form-section">
+              <h3>Workflow Editor</h3>
+              <form id="workflow-form">
+                <input type="hidden" id="workflow-id" />
+                <div class="workflow-header-row">
+                  <label>
+                    Name
+                    <input type="text" id="workflow-name" required placeholder="My Workflow" />
+                  </label>
+                  <label>
+                    Description
+                    <input type="text" id="workflow-description" placeholder="Optional description" />
+                  </label>
+                </div>
+              </form>
+            </div>
+
+            <!-- Visual Canvas -->
+            <div class="workflow-canvas-section">
+              <div class="canvas-toolbar">
+                <span class="toolbar-label">Add Node:</span>
+                <button type="button" class="node-add-btn" data-type="start" title="Start Node">▶ Start</button>
+                <button type="button" class="node-add-btn" data-type="agent" title="Agent Node">🤖 Agent</button>
+                <button type="button" class="node-add-btn" data-type="tool" title="Tool Node">🔧 Tool</button>
+                <button type="button" class="node-add-btn" data-type="condition" title="Condition Node">❓ Condition</button>
+                <button type="button" class="node-add-btn" data-type="end" title="End Node">⏹ End</button>
+                <span class="toolbar-separator"></span>
+                <button type="button" id="workflow-clear-canvas" class="toolbar-btn-danger" title="Clear All">🗑 Clear</button>
+              </div>
+              <div class="workflow-canvas" id="workflow-canvas">
+                <div class="canvas-placeholder">
+                  <p>Click buttons above to add nodes. Drag nodes to position them. Click nodes to configure.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="workflow-actions">
+              <button type="button" id="workflow-save-btn">💾 Save Workflow</button>
+              <button type="button" id="workflow-reset-btn" class="secondary-btn">Reset</button>
+            </div>
+            <div id="workflow-message" class="eval-message"></div>
+          </div>
+
+          <!-- Right: Node Editor & Run Panel -->
+          <div class="orchestrator-config">
+            <div class="node-editor" id="node-editor" style="display:none;">
+              <h3>Node Configuration</h3>
+              <form id="node-config-form">
+                <input type="hidden" id="node-config-id" />
+                <label>
+                  Node Label
+                  <input type="text" id="node-config-label" required />
+                </label>
+                <div id="node-config-type-fields"></div>
+                <h4>Connections</h4>
+                <div class="node-connections">
+                  <label>
+                    Connect to:
+                    <select id="node-connect-target">
+                      <option value="">-- Select target node --</option>
+                    </select>
+                  </label>
+                  <div id="node-connect-condition-wrap" style="display:none;">
+                    <label>
+                      Condition (for conditional edges)
+                      <input type="text" id="node-connect-condition" placeholder="contains:yes OR equals:approved" />
+                    </label>
+                  </div>
+                  <button type="button" id="node-add-edge-btn">Add Connection</button>
+                </div>
+                <div class="node-current-edges">
+                  <h5>Current Edges:</h5>
+                  <ul id="node-edges-list"></ul>
+                </div>
+                <div class="node-editor-actions">
+                  <button type="button" id="node-save-btn">Update Node</button>
+                  <button type="button" id="node-delete-btn" class="danger-btn">Delete Node</button>
+                </div>
+              </form>
+            </div>
+
+            <div class="workflow-run-section">
+              <h3>Run Workflow</h3>
+              <label>
+                Input Data (JSON)
+                <textarea id="workflow-run-input" rows="4" placeholder='{"query": "What is the capital of France?"}'></textarea>
+              </label>
+              <button type="button" id="workflow-run-btn">▶ Execute Workflow</button>
+              <div id="workflow-run-message" class="eval-message"></div>
+            </div>
+
+            <div class="workflow-execution-view" id="workflow-execution-view" style="display:none;">
+              <h3>Execution Result</h3>
+              <div class="execution-summary">
+                <span id="execution-status"></span>
+                <span id="execution-duration"></span>
+              </div>
+              <div class="execution-steps" id="execution-steps"></div>
+              <div class="execution-final">
+                <h4>Final Output:</h4>
+                <pre id="execution-output"></pre>
+              </div>
+              <button type="button" id="execution-close-btn" class="secondary-btn">Close</button>
             </div>
           </div>
         </div>

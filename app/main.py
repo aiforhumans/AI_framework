@@ -20,6 +20,9 @@ from app.models.service import (
     CustomEvaluatorUpdateRequest,
     EvalJobCreateRequest,
     BulkRunRequest,
+    WorkflowCreateRequest,
+    WorkflowUpdateRequest,
+    WorkflowRunRequest,
 )
 
 
@@ -323,3 +326,66 @@ async def delete_eval_job(job_id: int):
     if not success:
         raise HTTPException(status_code=404, detail="Eval job not found")
     return {"success": True}
+
+
+# --- Workflow (Agent Orchestrator) Endpoints ---
+
+@app.get("/api/workflows", response_class=JSONResponse)
+async def list_workflows():
+    workflows = llm_service.list_workflows()
+    return {"workflows": [w.model_dump() for w in workflows]}
+
+
+@app.get("/api/workflows/{workflow_id}", response_class=JSONResponse)
+async def get_workflow(workflow_id: int):
+    workflow = llm_service.get_workflow(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return workflow.model_dump()
+
+
+@app.post("/api/workflows", response_class=JSONResponse)
+async def create_workflow(payload: WorkflowCreateRequest):
+    workflow = llm_service.create_workflow(payload)
+    return workflow.model_dump()
+
+
+@app.put("/api/workflows/{workflow_id}", response_class=JSONResponse)
+async def update_workflow(workflow_id: int, payload: WorkflowUpdateRequest):
+    workflow = llm_service.update_workflow(workflow_id, payload)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return workflow.model_dump()
+
+
+@app.delete("/api/workflows/{workflow_id}", response_class=JSONResponse)
+async def delete_workflow(workflow_id: int):
+    success = llm_service.delete_workflow(workflow_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return {"success": True}
+
+
+@app.post("/api/workflows/{workflow_id}/run", response_class=JSONResponse)
+async def run_workflow(workflow_id: int, payload: WorkflowRunRequest):
+    payload.workflow_id = workflow_id
+    try:
+        run = await llm_service.run_workflow(payload)
+        return run.model_dump()
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/workflow-runs", response_class=JSONResponse)
+async def list_workflow_runs(workflow_id: int = None):
+    runs = llm_service.list_workflow_runs(workflow_id)
+    return {"runs": [r.model_dump() for r in runs]}
+
+
+@app.get("/api/workflow-runs/{run_id}", response_class=JSONResponse)
+async def get_workflow_run(run_id: int):
+    runs = llm_service.list_workflow_runs()
+    for run in runs:
+        if run.id == run_id:
+            return run.model_dump()
+    raise HTTPException(status_code=404, detail="Workflow run not found")

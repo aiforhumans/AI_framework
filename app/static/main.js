@@ -486,6 +486,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initPromptBuilderUI();
   initABTesterUI();
   initEvaluationUI();
+  initOrchestratorUI();
 });
 
 
@@ -860,6 +861,16 @@ function applyPromptTemplateToPlayground() {
   // Optionally copy system prompt into the Agent Instructions box so it is visible
   if (agentInstructionsEl && systemEl) {
     agentInstructionsEl.value = systemEl.value;
+  }
+  
+  // Update character counts
+  updatePromptCharCount();
+  updateSystemCharCount();
+  
+  // Switch to Playground tab
+  const playgroundBtn = document.querySelector('[data-tab="playground-tab"]');
+  if (playgroundBtn) {
+    playgroundBtn.click();
   }
 }
 
@@ -1709,5 +1720,689 @@ function initEvaluationUI() {
 
   refreshEvaluationUI().catch((err) => {
     console.error("Failed to load evaluation data:", err);
+  });
+}
+
+
+// ========== Agent Orchestrator UI ==========
+
+let workflowNodes = [];
+let workflowEdges = [];
+let selectedNodeId = null;
+let nodeIdCounter = 1;
+
+async function fetchWorkflows() {
+  const res = await fetch("/api/workflows");
+  if (!res.ok) throw new Error(`Failed to fetch workflows: ${res.status}`);
+  const data = await res.json();
+  return data.workflows || [];
+}
+
+async function fetchWorkflowRuns(workflowId = null) {
+  const url = workflowId ? `/api/workflow-runs?workflow_id=${workflowId}` : "/api/workflow-runs";
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch workflow runs: ${res.status}`);
+  const data = await res.json();
+  return data.runs || [];
+}
+
+function renderWorkflowsTable(workflows) {
+  const tbody = document.querySelector("#workflows-table tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  workflows.forEach((wf) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${wf.id}</td>
+      <td>${wf.name}</td>
+      <td>${wf.nodes ? wf.nodes.length : 0}</td>
+      <td>
+        <button type="button" data-action="edit" data-id="${wf.id}">Edit</button>
+        <button type="button" data-action="delete" data-id="${wf.id}">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", onWorkflowTableAction);
+  });
+}
+
+async function onWorkflowTableAction(event) {
+  const btn = event.currentTarget;
+  const id = Number(btn.getAttribute("data-id"));
+  const action = btn.getAttribute("data-action");
+
+  if (action === "edit") {
+    await loadWorkflow(id);
+  } else if (action === "delete") {
+    if (window.confirm("Delete this workflow?")) {
+      await fetch(`/api/workflows/${id}`, { method: "DELETE" });
+      await refreshOrchestratorUI();
+    }
+  }
+}
+
+async function loadWorkflow(id) {
+  const res = await fetch(`/api/workflows/${id}`);
+  if (!res.ok) return;
+  const wf = await res.json();
+
+  document.getElementById("workflow-id").value = wf.id;
+  document.getElementById("workflow-name").value = wf.name || "";
+  document.getElementById("workflow-description").value = wf.description || "";
+
+  workflowNodes = wf.nodes || [];
+  workflowEdges = wf.edges || [];
+  
+  // Reset node counter
+  nodeIdCounter = workflowNodes.length > 0 
+    ? Math.max(...workflowNodes.map(n => parseInt(n.id.replace("node_", "")) || 0)) + 1 
+    : 1;
+
+  renderWorkflowCanvas();
+  selectedNodeId = null;
+  hideNodeEditor();
+  
+  // Load run history for this workflow
+  await loadWorkflowRuns(id);
+}
+
+async function loadWorkflowRuns(workflowId) {
+  const runs = await fetchWorkflowRuns(workflowId);
+  renderWorkflowRuns(runs);
+}
+
+function renderWorkflowRuns(runs) {
+  const container = document.getElementById("workflow-runs-container");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (runs.length === 0) {
+    container.innerHTML = '<p class="helper-text">No runs yet</p>';
+    return;
+  }
+
+  runs.slice().reverse().slice(0, 10).forEach((run) => {
+    const div = document.createElement("div");
+    div.className = `workflow-run-item ${run.status}`;
+    const statusIcon = run.status === "completed" ? "✅" : run.status === "running" ? "⏳" : "❌";
+    div.innerHTML = `
+      <span>${statusIcon} Run #${run.id}</span>
+      <span class="run-date">${new Date(run.started_at).toLocaleString()}</span>
+      <button type="button" data-id="${run.id}">View</button>
+    `;
+    container.appendChild(div);
+  });
+
+  container.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const runId = Number(e.currentTarget.getAttribute("data-id"));
+      await showWorkflowRun(runId);
+    });
+  });
+}
+
+async function showWorkflowRun(runId) {
+  const runs = await fetchWorkflowRuns();
+  const run = runs.find(r => r.id === runId);
+  if (!run) return;
+
+  const view = document.getElementById("workflow-execution-view");
+  const statusEl = document.getElementById("execution-status");
+  const durationEl = document.getElementById("execution-duration");
+  const stepsEl = document.getElementById("execution-steps");
+  const outputEl = document.getElementById("execution-output");
+
+  statusEl.textContent = `Status: ${run.status}`;
+  statusEl.className = `execution-status ${run.status}`;
+  
+  if (run.completed_at && run.started_at) {
+    const duration = new Date(run.completed_at) - new Date(run.started_at);
+    durationEl.textContent = `Duration: ${duration}ms`;
+  } else {
+    durationEl.textContent = "";
+  }
+
+  stepsEl.innerHTML = "";
+  (run.steps || []).forEach((step, idx) => {
+    const stepDiv = document.createElement("div");
+    stepDiv.className = `execution-step ${step.status}`;
+    stepDiv.innerHTML = `
+      <span class="step-num">${idx + 1}</span>
+      <span class="step-node">${step.node_id}</span>
+      <span class="step-status">${step.status === "completed" ? "✓" : step.status === "error" ? "✗" : "..."}</span>
+      ${step.output ? `<pre class="step-output">${escapeHtml(JSON.stringify(step.output).substring(0, 200))}</pre>` : ""}
+      ${step.error ? `<pre class="step-error">${escapeHtml(step.error)}</pre>` : ""}
+    `;
+    stepsEl.appendChild(stepDiv);
+  });
+
+  outputEl.textContent = run.final_output ? JSON.stringify(run.final_output, null, 2) : "(No output)";
+  view.style.display = "block";
+}
+
+function resetWorkflowForm() {
+  document.getElementById("workflow-id").value = "";
+  document.getElementById("workflow-name").value = "";
+  document.getElementById("workflow-description").value = "";
+  workflowNodes = [];
+  workflowEdges = [];
+  selectedNodeId = null;
+  nodeIdCounter = 1;
+  renderWorkflowCanvas();
+  hideNodeEditor();
+  document.getElementById("workflow-message").textContent = "";
+}
+
+function addNode(type) {
+  const id = `node_${nodeIdCounter++}`;
+  const labels = {
+    start: "Start",
+    agent: "Agent Call",
+    tool: "Tool Call",
+    condition: "Condition",
+    end: "End"
+  };
+
+  const node = {
+    id: id,
+    type: type,
+    label: labels[type] || type,
+    config: {},
+    x: 50 + (workflowNodes.length % 3) * 200,
+    y: 50 + Math.floor(workflowNodes.length / 3) * 120
+  };
+
+  // Default configs
+  if (type === "agent") {
+    node.config = { model: "", system_prompt: "", prompt_template: "{{input}}" };
+  } else if (type === "tool") {
+    node.config = { tool_id: "", input_template: "{{prev_output}}" };
+  } else if (type === "condition") {
+    node.config = { expression: "contains:yes" };
+  }
+
+  workflowNodes.push(node);
+  renderWorkflowCanvas();
+  selectNode(id);
+}
+
+function renderWorkflowCanvas() {
+  const canvas = document.getElementById("workflow-canvas");
+  if (!canvas) return;
+  
+  canvas.innerHTML = "";
+
+  if (workflowNodes.length === 0) {
+    canvas.innerHTML = `
+      <div class="canvas-placeholder">
+        <p>Click buttons above to add nodes. Drag nodes to position them. Click nodes to configure.</p>
+      </div>
+    `;
+    return;
+  }
+
+  // Render edges first (SVG layer)
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("edges-layer");
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", "100%");
+
+  workflowEdges.forEach((edge) => {
+    const fromNode = workflowNodes.find(n => n.id === edge.source);
+    const toNode = workflowNodes.find(n => n.id === edge.target);
+    if (!fromNode || !toNode) return;
+
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", fromNode.x + 75);
+    line.setAttribute("y1", fromNode.y + 40);
+    line.setAttribute("x2", toNode.x + 75);
+    line.setAttribute("y2", toNode.y + 40);
+    line.classList.add("edge-line");
+    if (edge.condition) {
+      line.classList.add("conditional");
+    }
+    svg.appendChild(line);
+
+    // Arrow head
+    const angle = Math.atan2(toNode.y - fromNode.y, toNode.x - fromNode.x);
+    const arrowX = toNode.x + 75 - 15 * Math.cos(angle);
+    const arrowY = toNode.y + 40 - 15 * Math.sin(angle);
+    
+    const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    const arrowSize = 8;
+    const points = [
+      [arrowX, arrowY],
+      [arrowX - arrowSize * Math.cos(angle - Math.PI/6), arrowY - arrowSize * Math.sin(angle - Math.PI/6)],
+      [arrowX - arrowSize * Math.cos(angle + Math.PI/6), arrowY - arrowSize * Math.sin(angle + Math.PI/6)]
+    ];
+    arrow.setAttribute("points", points.map(p => p.join(",")).join(" "));
+    arrow.classList.add("edge-arrow");
+    svg.appendChild(arrow);
+
+    // Edge label for conditions
+    if (edge.condition) {
+      const labelX = (fromNode.x + toNode.x) / 2 + 75;
+      const labelY = (fromNode.y + toNode.y) / 2 + 40;
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", labelX);
+      text.setAttribute("y", labelY - 5);
+      text.classList.add("edge-label");
+      text.textContent = edge.condition.substring(0, 15);
+      svg.appendChild(text);
+    }
+  });
+
+  canvas.appendChild(svg);
+
+  // Render nodes
+  workflowNodes.forEach((node) => {
+    const nodeEl = document.createElement("div");
+    nodeEl.className = `workflow-node node-${node.type}`;
+    if (node.id === selectedNodeId) {
+      nodeEl.classList.add("selected");
+    }
+    nodeEl.style.left = `${node.x}px`;
+    nodeEl.style.top = `${node.y}px`;
+    nodeEl.setAttribute("data-id", node.id);
+
+    const icons = { start: "▶", agent: "🤖", tool: "🔧", condition: "❓", end: "⏹" };
+    nodeEl.innerHTML = `
+      <div class="node-icon">${icons[node.type] || "●"}</div>
+      <div class="node-label">${node.label}</div>
+    `;
+
+    nodeEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      selectNode(node.id);
+    });
+
+    // Make draggable
+    nodeEl.addEventListener("mousedown", (e) => {
+      if (e.target.classList.contains("workflow-node") || e.target.parentElement.classList.contains("workflow-node")) {
+        startDrag(e, node);
+      }
+    });
+
+    canvas.appendChild(nodeEl);
+  });
+
+  // Click on canvas deselects
+  canvas.addEventListener("click", (e) => {
+    if (e.target === canvas || e.target.classList.contains("canvas-placeholder")) {
+      selectedNodeId = null;
+      hideNodeEditor();
+      renderWorkflowCanvas();
+    }
+  });
+}
+
+let isDragging = false;
+let dragNode = null;
+let dragOffset = { x: 0, y: 0 };
+
+function startDrag(e, node) {
+  isDragging = true;
+  dragNode = node;
+  dragOffset = {
+    x: e.clientX - node.x,
+    y: e.clientY - node.y
+  };
+  document.addEventListener("mousemove", onDrag);
+  document.addEventListener("mouseup", endDrag);
+}
+
+function onDrag(e) {
+  if (!isDragging || !dragNode) return;
+  
+  const canvas = document.getElementById("workflow-canvas");
+  const rect = canvas.getBoundingClientRect();
+  
+  dragNode.x = Math.max(0, Math.min(e.clientX - dragOffset.x, rect.width - 150));
+  dragNode.y = Math.max(0, Math.min(e.clientY - dragOffset.y, rect.height - 80));
+  
+  renderWorkflowCanvas();
+}
+
+function endDrag() {
+  isDragging = false;
+  dragNode = null;
+  document.removeEventListener("mousemove", onDrag);
+  document.removeEventListener("mouseup", endDrag);
+}
+
+function selectNode(nodeId) {
+  selectedNodeId = nodeId;
+  renderWorkflowCanvas();
+  showNodeEditor(nodeId);
+}
+
+function showNodeEditor(nodeId) {
+  const node = workflowNodes.find(n => n.id === nodeId);
+  if (!node) return;
+
+  const editor = document.getElementById("node-editor");
+  editor.style.display = "block";
+
+  document.getElementById("node-config-id").value = node.id;
+  document.getElementById("node-config-label").value = node.label;
+
+  // Type-specific fields
+  const fieldsContainer = document.getElementById("node-config-type-fields");
+  fieldsContainer.innerHTML = "";
+
+  if (node.type === "agent") {
+    fieldsContainer.innerHTML = `
+      <label>
+        Model
+        <input type="text" id="node-cfg-model" value="${node.config.model || ""}" placeholder="Model name (optional)" />
+      </label>
+      <label>
+        System Prompt
+        <textarea id="node-cfg-system" rows="2">${node.config.system_prompt || ""}</textarea>
+      </label>
+      <label>
+        Prompt Template
+        <textarea id="node-cfg-prompt" rows="2" placeholder="Use {{input}} or {{prev_output}}">${node.config.prompt_template || "{{input}}"}</textarea>
+      </label>
+    `;
+  } else if (node.type === "tool") {
+    fieldsContainer.innerHTML = `
+      <label>
+        Tool ID
+        <input type="text" id="node-cfg-tool-id" value="${node.config.tool_id || ""}" placeholder="Tool ID" />
+      </label>
+      <label>
+        Input Template
+        <textarea id="node-cfg-tool-input" rows="2" placeholder="Use {{prev_output}}">${node.config.input_template || "{{prev_output}}"}</textarea>
+      </label>
+    `;
+  } else if (node.type === "condition") {
+    fieldsContainer.innerHTML = `
+      <label>
+        Expression
+        <input type="text" id="node-cfg-condition" value="${node.config.expression || ""}" placeholder="contains:yes, equals:approved, >:50" />
+      </label>
+      <p class="helper-text">Operators: contains, equals, startswith, endswith, >, <, >=, <=</p>
+    `;
+  }
+
+  // Populate edge targets
+  updateEdgeTargetSelect();
+  updateCurrentEdgesList();
+  
+  // Show/hide condition input based on node type
+  const conditionWrap = document.getElementById("node-connect-condition-wrap");
+  conditionWrap.style.display = node.type === "condition" ? "block" : "none";
+}
+
+function hideNodeEditor() {
+  document.getElementById("node-editor").style.display = "none";
+}
+
+function updateEdgeTargetSelect() {
+  const select = document.getElementById("node-connect-target");
+  select.innerHTML = '<option value="">-- Select target node --</option>';
+  
+  workflowNodes.forEach((node) => {
+    if (node.id !== selectedNodeId) {
+      const opt = document.createElement("option");
+      opt.value = node.id;
+      opt.textContent = `${node.label} (${node.id})`;
+      select.appendChild(opt);
+    }
+  });
+}
+
+function updateCurrentEdgesList() {
+  const list = document.getElementById("node-edges-list");
+  list.innerHTML = "";
+  
+  const nodeEdges = workflowEdges.filter(e => e.source === selectedNodeId);
+  
+  if (nodeEdges.length === 0) {
+    list.innerHTML = "<li>No connections</li>";
+    return;
+  }
+  
+  nodeEdges.forEach((edge, idx) => {
+    const targetNode = workflowNodes.find(n => n.id === edge.target);
+    const li = document.createElement("li");
+    li.innerHTML = `
+      → ${targetNode ? targetNode.label : edge.target} 
+      ${edge.condition ? `<span class="edge-condition-tag">(${edge.condition})</span>` : ""}
+      <button type="button" class="remove-edge-btn" data-idx="${idx}">✕</button>
+    `;
+    list.appendChild(li);
+  });
+  
+  list.querySelectorAll(".remove-edge-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const idx = Number(e.currentTarget.getAttribute("data-idx"));
+      const nodeEdges = workflowEdges.filter(ed => ed.source === selectedNodeId);
+      const edgeToRemove = nodeEdges[idx];
+      workflowEdges = workflowEdges.filter(ed => ed !== edgeToRemove);
+      updateCurrentEdgesList();
+      renderWorkflowCanvas();
+    });
+  });
+}
+
+function addEdge() {
+  const targetId = document.getElementById("node-connect-target").value;
+  if (!targetId || !selectedNodeId) return;
+  
+  const condition = document.getElementById("node-connect-condition").value.trim() || null;
+  
+  // Check for duplicate
+  const exists = workflowEdges.some(e => e.source === selectedNodeId && e.target === targetId);
+  if (exists) {
+    alert("Edge already exists");
+    return;
+  }
+  
+  workflowEdges.push({
+    source: selectedNodeId,
+    target: targetId,
+    condition: condition
+  });
+  
+  document.getElementById("node-connect-target").value = "";
+  document.getElementById("node-connect-condition").value = "";
+  
+  updateCurrentEdgesList();
+  renderWorkflowCanvas();
+}
+
+function updateNodeFromEditor() {
+  const node = workflowNodes.find(n => n.id === selectedNodeId);
+  if (!node) return;
+  
+  node.label = document.getElementById("node-config-label").value;
+  
+  if (node.type === "agent") {
+    node.config.model = document.getElementById("node-cfg-model")?.value || "";
+    node.config.system_prompt = document.getElementById("node-cfg-system")?.value || "";
+    node.config.prompt_template = document.getElementById("node-cfg-prompt")?.value || "{{input}}";
+  } else if (node.type === "tool") {
+    node.config.tool_id = document.getElementById("node-cfg-tool-id")?.value || "";
+    node.config.input_template = document.getElementById("node-cfg-tool-input")?.value || "{{prev_output}}";
+  } else if (node.type === "condition") {
+    node.config.expression = document.getElementById("node-cfg-condition")?.value || "";
+  }
+  
+  renderWorkflowCanvas();
+  document.getElementById("workflow-message").textContent = "Node updated";
+  setTimeout(() => { document.getElementById("workflow-message").textContent = ""; }, 2000);
+}
+
+function deleteSelectedNode() {
+  if (!selectedNodeId) return;
+  if (!confirm("Delete this node?")) return;
+  
+  workflowNodes = workflowNodes.filter(n => n.id !== selectedNodeId);
+  workflowEdges = workflowEdges.filter(e => e.source !== selectedNodeId && e.target !== selectedNodeId);
+  
+  selectedNodeId = null;
+  hideNodeEditor();
+  renderWorkflowCanvas();
+}
+
+async function saveWorkflow() {
+  const messageEl = document.getElementById("workflow-message");
+  messageEl.textContent = "";
+  
+  const id = document.getElementById("workflow-id").value;
+  const name = document.getElementById("workflow-name").value.trim();
+  const description = document.getElementById("workflow-description").value.trim();
+  
+  if (!name) {
+    messageEl.textContent = "Name is required";
+    return;
+  }
+  
+  if (workflowNodes.length === 0) {
+    messageEl.textContent = "Add at least one node";
+    return;
+  }
+  
+  const payload = {
+    name,
+    description,
+    nodes: workflowNodes,
+    edges: workflowEdges
+  };
+  
+  const isUpdate = !!id;
+  const url = isUpdate ? `/api/workflows/${id}` : "/api/workflows";
+  const method = isUpdate ? "PUT" : "POST";
+  
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) {
+      messageEl.textContent = `Save failed: ${res.status}`;
+      return;
+    }
+    
+    const saved = await res.json();
+    document.getElementById("workflow-id").value = saved.id;
+    messageEl.textContent = "Workflow saved!";
+    messageEl.style.color = "#4ade80";
+    
+    await refreshOrchestratorUI();
+  } catch (err) {
+    messageEl.textContent = `Error: ${err.message}`;
+  }
+}
+
+async function runWorkflow() {
+  const messageEl = document.getElementById("workflow-run-message");
+  messageEl.textContent = "";
+  
+  const workflowId = document.getElementById("workflow-id").value;
+  if (!workflowId) {
+    messageEl.textContent = "Save the workflow first";
+    return;
+  }
+  
+  const inputStr = document.getElementById("workflow-run-input").value.trim();
+  let inputData = {};
+  
+  if (inputStr) {
+    try {
+      inputData = JSON.parse(inputStr);
+    } catch (e) {
+      messageEl.textContent = "Invalid JSON input";
+      return;
+    }
+  }
+  
+  messageEl.textContent = "Running...";
+  
+  try {
+    const res = await fetch(`/api/workflows/${workflowId}/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workflow_id: Number(workflowId), input_data: inputData })
+    });
+    
+    if (!res.ok) {
+      const errData = await res.json();
+      messageEl.textContent = `Run failed: ${errData.detail || res.status}`;
+      return;
+    }
+    
+    const run = await res.json();
+    messageEl.textContent = "Complete!";
+    
+    // Show execution result
+    await showWorkflowRun(run.id);
+    await loadWorkflowRuns(Number(workflowId));
+  } catch (err) {
+    messageEl.textContent = `Error: ${err.message}`;
+  }
+}
+
+function clearWorkflowCanvas() {
+  if (workflowNodes.length > 0 && !confirm("Clear all nodes and edges?")) return;
+  workflowNodes = [];
+  workflowEdges = [];
+  selectedNodeId = null;
+  nodeIdCounter = 1;
+  hideNodeEditor();
+  renderWorkflowCanvas();
+}
+
+async function refreshOrchestratorUI() {
+  const workflows = await fetchWorkflows();
+  renderWorkflowsTable(workflows);
+  
+  const runs = await fetchWorkflowRuns();
+  renderWorkflowRuns(runs);
+}
+
+function initOrchestratorUI() {
+  const newBtn = document.getElementById("workflow-new-btn");
+  const saveBtn = document.getElementById("workflow-save-btn");
+  const resetBtn = document.getElementById("workflow-reset-btn");
+  const clearCanvasBtn = document.getElementById("workflow-clear-canvas");
+  const runBtn = document.getElementById("workflow-run-btn");
+  const addEdgeBtn = document.getElementById("node-add-edge-btn");
+  const nodeSaveBtn = document.getElementById("node-save-btn");
+  const nodeDeleteBtn = document.getElementById("node-delete-btn");
+  const executionCloseBtn = document.getElementById("execution-close-btn");
+  
+  if (!newBtn) return;
+  
+  newBtn.addEventListener("click", resetWorkflowForm);
+  saveBtn.addEventListener("click", saveWorkflow);
+  resetBtn.addEventListener("click", resetWorkflowForm);
+  clearCanvasBtn.addEventListener("click", clearWorkflowCanvas);
+  runBtn.addEventListener("click", runWorkflow);
+  addEdgeBtn.addEventListener("click", addEdge);
+  nodeSaveBtn.addEventListener("click", updateNodeFromEditor);
+  nodeDeleteBtn.addEventListener("click", deleteSelectedNode);
+  executionCloseBtn.addEventListener("click", () => {
+    document.getElementById("workflow-execution-view").style.display = "none";
+  });
+  
+  // Node add buttons
+  document.querySelectorAll(".node-add-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const type = btn.getAttribute("data-type");
+      addNode(type);
+    });
+  });
+  
+  refreshOrchestratorUI().catch((err) => {
+    console.error("Failed to load orchestrator data:", err);
   });
 }

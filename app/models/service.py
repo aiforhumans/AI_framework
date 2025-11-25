@@ -7,6 +7,10 @@ from app.models.tools_store import ToolStore, ToolConfig
 from app.models.prompt_templates_store import PromptTemplateStore, PromptTemplate
 from app.models.eval_store import DatasetStore, Dataset, CustomEvaluatorStore, CustomEvaluator, EvalJobStore, EvalJob
 from app.models.evaluators import BUILTIN_EVALUATORS, run_builtin_evaluator
+from app.models.workflow_store import (
+    WorkflowStore, Workflow, WorkflowNode, WorkflowEdge,
+    WorkflowRunStore, WorkflowRun, WorkflowStepResult
+)
 
 
 class AgentConfig(BaseModel):
@@ -146,6 +150,28 @@ class BulkRunRequest(BaseModel):
     temperature: Optional[float] = 0.7
 
 
+# --- Workflow Request Models ---
+
+class WorkflowCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    nodes: List[dict] = []
+    edges: List[dict] = []
+    entry_node: Optional[str] = None
+
+
+class WorkflowUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    nodes: Optional[List[dict]] = None
+    edges: Optional[List[dict]] = None
+    entry_node: Optional[str] = None
+
+
+class WorkflowRunRequest(BaseModel):
+    input_text: str
+
+
 LMSTUDIO_BASE_URL = "http://127.0.0.1:1234/v1"
 LMSTUDIO_CHAT_COMPLETIONS = f"{LMSTUDIO_BASE_URL}/chat/completions"
 LMSTUDIO_MODELS = f"{LMSTUDIO_BASE_URL}/models/"
@@ -193,6 +219,9 @@ class LocalLLMService:
         self._dataset_store = DatasetStore()
         self._custom_evaluator_store = CustomEvaluatorStore()
         self._eval_job_store = EvalJobStore()
+        # Workflow stores for Agent Orchestrator
+        self._workflow_store = WorkflowStore()
+        self._workflow_run_store = WorkflowRunStore()
 
     async def refresh_models(self) -> List[str]:
         """Fetch available models from LM Studio's /models/ endpoint."""
@@ -872,3 +901,250 @@ The final prompt you output should adhere to the following structure below. Do n
             }
             for key, val in BUILTIN_EVALUATORS.items()
         ]
+
+    # --- Workflow Management ---
+
+    def list_workflows(self) -> List[Workflow]:
+        return self._workflow_store.list_all()
+
+    def get_workflow(self, workflow_id: int) -> Optional[Workflow]:
+        return self._workflow_store.get(workflow_id)
+
+    def create_workflow(self, request: WorkflowCreateRequest) -> Workflow:
+        return self._workflow_store.create(
+            name=request.name,
+            description=request.description,
+            nodes=request.nodes,
+            edges=request.edges,
+            entry_node=request.entry_node,
+        )
+
+    def update_workflow(self, workflow_id: int, request: WorkflowUpdateRequest) -> Optional[Workflow]:
+        return self._workflow_store.update(
+            workflow_id,
+            name=request.name,
+            description=request.description,
+            nodes=request.nodes,
+            edges=request.edges,
+            entry_node=request.entry_node,
+        )
+
+    def delete_workflow(self, workflow_id: int) -> bool:
+        return self._workflow_store.delete(workflow_id)
+
+    # --- Workflow Run Management ---
+
+    def list_workflow_runs(self, workflow_id: int = None) -> List[WorkflowRun]:
+        if workflow_id:
+            return self._workflow_run_store.list_by_workflow(workflow_id)
+        return self._workflow_run_store.list_all()
+
+    def get_workflow_run(self, run_id: int) -> Optional[WorkflowRun]:
+        return self._workflow_run_store.get(run_id)
+
+    def delete_workflow_run(self, run_id: int) -> bool:
+        return self._workflow_run_store.delete(run_id)
+
+    async def run_workflow(self, workflow_id: int, input_text: str):
+        """Execute a workflow and stream step results."""
+        workflow = self._workflow_store.get(workflow_id)
+        if not workflow:
+            yield {"error": f"Workflow {workflow_id} not found"}
+            return
+
+        if not workflow.nodes:
+            yield {"error": "Workflow has no nodes"}
+            return
+
+        # Create a run record
+        run = self._workflow_run_store.create(workflow_id, workflow.name, input_text)
+        yield {"type": "run_started", "run_id": run.id}
+
+        # Build adjacency list for traversal
+        adjacency: Dict[str, List[tuple]] = {}  # node_id -> [(target_id, edge_label)]
+        for edge in workflow.edges:
+            if edge.source not in adjacency:
+                adjacency[edge.source] = []
+            adjacency[edge.source].append((edge.target, edge.label, edge.condition))
+
+        # Find entry node
+        entry_node_id = workflow.entry_node
+        if not entry_node_id and workflow.nodes:
+            entry_node_id = workflow.nodes[0].id
+
+        # Build node lookup
+        nodes_by_id = {n.id: n for n in workflow.nodes}
+
+        # Execute workflow
+        current_output = input_text
+        visited = set()
+        queue = [entry_node_id]
+        final_output = ""
+        error_occurred = False
+
+        while queue and not error_occurred:
+            node_id = queue.pop(0)
+            if node_id in visited:
+                continue
+            visited.add(node_id)
+
+            node = nodes_by_id.get(node_id)
+            if not node:
+                continue
+
+            yield {"type": "step_started", "node_id": node.id, "node_label": node.label}
+
+            step_result = await self._execute_node(node, current_output, input_text)
+            
+            # Record step
+            self._workflow_run_store.add_step(run.id, step_result)
+
+            yield {
+                "type": "step_completed",
+                "node_id": node.id,
+                "node_label": node.label,
+                "node_type": node.type,
+                "output": step_result.output_text,
+                "latency_ms": step_result.latency_ms,
+                "error": step_result.error,
+            }
+
+            if step_result.error:
+                error_occurred = True
+                self._workflow_run_store.complete(run.id, "", "failed", step_result.error)
+                yield {"type": "run_failed", "error": step_result.error}
+                return
+
+            current_output = step_result.output_text
+            final_output = current_output
+
+            # Determine next nodes based on edges
+            if node_id in adjacency:
+                for target_id, edge_label, condition in adjacency[node_id]:
+                    if condition:
+                        # Conditional edge - check if condition matches
+                        # For condition nodes, output is "true" or "false"
+                        if node.type == "condition":
+                            if condition.lower() == current_output.lower().strip():
+                                queue.append(target_id)
+                        else:
+                            queue.append(target_id)
+                    else:
+                        queue.append(target_id)
+
+        # Complete the run
+        self._workflow_run_store.complete(run.id, final_output, "completed")
+        yield {"type": "run_completed", "final_output": final_output, "run_id": run.id}
+
+    async def _execute_node(self, node: WorkflowNode, current_input: str, original_input: str) -> WorkflowStepResult:
+        """Execute a single workflow node."""
+        start = asyncio.get_event_loop().time()
+        output = ""
+        error = None
+
+        try:
+            if node.type == "agent":
+                output = await self._execute_agent_node(node.config, current_input)
+            elif node.type == "condition":
+                output = self._execute_condition_node(node.config, current_input)
+            elif node.type == "transform":
+                output = self._execute_transform_node(node.config, current_input, original_input)
+            elif node.type == "output":
+                output = current_input  # Pass through
+            else:
+                output = current_input
+        except Exception as e:
+            error = str(e)
+            output = ""
+
+        end = asyncio.get_event_loop().time()
+
+        return WorkflowStepResult(
+            node_id=node.id,
+            node_label=node.label,
+            node_type=node.type,
+            input_text=current_input[:500],  # Truncate for storage
+            output_text=output,
+            latency_ms=round((end - start) * 1000, 1),
+            error=error,
+        )
+
+    async def _execute_agent_node(self, config: dict, input_text: str) -> str:
+        """Execute an agent node - call LLM with configuration."""
+        agent_id = config.get("agent_id")
+        model_name = config.get("model_name")
+        system_prompt = config.get("system_prompt", "")
+        max_tokens = config.get("max_tokens", 256)
+        temperature = config.get("temperature", 0.7)
+
+        # Resolve agent if specified
+        if agent_id:
+            agent = self.get_agent(agent_id)
+            if agent:
+                system_prompt = system_prompt or agent.instructions
+                model_name = model_name or agent.model_name
+                max_tokens = max_tokens or agent.max_tokens
+                temperature = temperature if temperature is not None else agent.temperature
+
+        # Default model
+        if not model_name:
+            model_name = self._models[0] if self._models else "unknown"
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": input_text})
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                LMSTUDIO_CHAT_COMPLETIONS,
+                json={
+                    "model": model_name,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        return data["choices"][0]["message"]["content"]
+
+    def _execute_condition_node(self, config: dict, input_text: str) -> str:
+        """Evaluate a condition and return 'true' or 'false'."""
+        variable = config.get("variable", "input")
+        operator = config.get("operator", "contains")
+        value = config.get("value", "")
+
+        # Get the value to check
+        check_value = input_text if variable == "input" else str(config.get(variable, input_text))
+
+        # Evaluate condition
+        result = False
+        if operator == "contains":
+            result = value.lower() in check_value.lower()
+        elif operator == "equals":
+            result = check_value.strip().lower() == str(value).lower()
+        elif operator == "starts_with":
+            result = check_value.lower().startswith(value.lower())
+        elif operator == "ends_with":
+            result = check_value.lower().endswith(value.lower())
+        elif operator == "length_gt":
+            result = len(check_value) > int(value)
+        elif operator == "length_lt":
+            result = len(check_value) < int(value)
+        elif operator == "not_empty":
+            result = len(check_value.strip()) > 0
+
+        return "true" if result else "false"
+
+    def _execute_transform_node(self, config: dict, current_input: str, original_input: str) -> str:
+        """Transform input using a template."""
+        template = config.get("template", "{{input}}")
+        
+        # Replace placeholders
+        output = template.replace("{{input}}", current_input)
+        output = output.replace("{{original_input}}", original_input)
+        output = output.replace("{{prev_output}}", current_input)
+        
+        return output
