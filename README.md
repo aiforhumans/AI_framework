@@ -1,6 +1,6 @@
 # LLM Testing Interface
 
-Python-based FastAPI backend with a minimal web UI for testing local LLM models.
+Python-based FastAPI backend with a minimal web UI for testing local LLM models and agent-style behaviors.
 
 Current implementation uses **LM Studio** as the local LLM runtime via its OpenAI-compatible HTTP API.
 
@@ -57,6 +57,21 @@ uvicorn app.main:app
 ```
 
 Then open `http://127.0.0.1:8000/` in your browser.
+
+## Features
+
+- **Playground tab**
+	- Choose an agent and/or model.
+	- Configure `max_tokens` and `temperature`.
+	- Send a prompt and inspect the response and latency.
+
+- **Tools tab (Tool Creator)**
+	- Define tools with name, description, endpoint, input schema, and model/agent associations.
+	- Toggle tools enabled/disabled and edit or delete existing tools.
+	- Tools are persisted as JSON in `app/data/tools.json` via `ToolStore` in `app/models/tools_store.py`.
+	- Includes a sample echo tool endpoint at `/api/tools/example/echo` for testing.
+
+More tabs (e.g., Dynamic Prompt Builder, A/B Tester) can be added incrementally by extending `app/static/index.html`, `app/static/main.js`, and wiring new REST endpoints in `app/main.py`.
 
 ## Local LLM integration (LM Studio)
 
