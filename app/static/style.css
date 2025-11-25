@@ -1,0 +1,72 @@
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #0f172a;
+  color: #e5e7eb;
+}
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+header h1 {
+  margin: 0 0 1rem;
+}
+
+.controls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.controls label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+}
+
+textarea#prompt {
+  width: 100%;
+  min-height: 160px;
+  resize: vertical;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid #1f2937;
+  background: #020617;
+  color: #e5e7eb;
+}
+
+#run-btn {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  border: none;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+}
+
+#run-btn:hover {
+  background: #1d4ed8;
+}
+
+.response-section {
+  margin-top: 1.5rem;
+}
+
+#response-output {
+  background: #020617;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  white-space: pre-wrap;
+  border: 1px solid #1f2937;
+}
+
+#meta {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
