@@ -1,0 +1,12 @@
+[
+  {
+    "id": 1,
+    "name": "Echo Tool",
+    "description": "",
+    "input_schema": {},
+    "endpoint": "/api/tools/example/echo",
+    "enabled": true,
+    "models": [],
+    "agents": []
+  }
+]

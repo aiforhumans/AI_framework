@@ -70,3 +70,137 @@ textarea#prompt {
   font-size: 0.85rem;
   color: #9ca3af;
 }
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.tab-button {
+  padding: 0.4rem 0.8rem;
+  border-radius: 0.375rem;
+  border: 1px solid #1f2937;
+  background: #020617;
+  color: #e5e7eb;
+  cursor: pointer;
+}
+
+.tab-button.active {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+.instructions-section {
+  margin-top: 1rem;
+}
+
+#agent-instructions {
+  width: 100%;
+  min-height: 80px;
+  resize: vertical;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid #1f2937;
+  background: #020617;
+  color: #e5e7eb;
+}
+
+.tools-layout {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.tools-list table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.tools-list th,
+.tools-list td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid #1f2937;
+}
+
+.tools-list th {
+  text-align: left;
+  background: #020617;
+}
+
+.tool-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.6rem;
+}
+
+.tool-form input[type="text"],
+.tool-form textarea {
+  padding: 0.4rem;
+  border-radius: 0.375rem;
+  border: 1px solid #1f2937;
+  background: #020617;
+  color: #e5e7eb;
+}
+
+.tool-form label.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tool-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.tool-form button {
+  padding: 0.4rem 0.8rem;
+  border-radius: 0.375rem;
+  border: none;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+}
+
+.tool-form button:hover {
+  background: #1d4ed8;
+}
+
+.tools-list button {
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  border: none;
+  background: #111827;
+  color: #e5e7eb;
+  cursor: pointer;
+  margin-right: 0.25rem;
+}
+
+.tools-list button:hover {
+  background: #1f2937;
+}
+
+.tool-message {
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+@media (max-width: 768px) {
+  .tools-layout {
+    grid-template-columns: 1fr;
+  }
+}

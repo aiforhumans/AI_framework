@@ -3,6 +3,8 @@ from pydantic import BaseModel
 import asyncio
 import httpx
 
+from app.models.tools_store import ToolStore, ToolConfig
+
 
 class AgentConfig(BaseModel):
     """High-level agent configuration similar to an Agent Builder card."""
@@ -31,6 +33,26 @@ class GenerateResponse(BaseModel):
     system_instructions: str
     response: str
     latency_ms: float
+
+
+class ToolCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    input_schema: dict = {}
+    endpoint: str = ""
+    enabled: bool = True
+    models: List[str] = []
+    agents: List[str] = []
+
+
+class ToolUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    input_schema: Optional[dict] = None
+    endpoint: Optional[str] = None
+    enabled: Optional[bool] = None
+    models: Optional[List[str]] = None
+    agents: Optional[List[str]] = None
 
 
 LMSTUDIO_BASE_URL = "http://127.0.0.1:1234/v1"
@@ -72,6 +94,8 @@ class LocalLLMService:
                 temperature=0.7,
             ),
         }
+        # Tool store for managing tool configurations
+        self._tool_store = ToolStore()
 
     async def refresh_models(self) -> List[str]:
         """Fetch available models from LM Studio's /models/ endpoint."""
@@ -99,6 +123,40 @@ class LocalLLMService:
 
     def get_agent(self, agent_id: str) -> Optional[AgentConfig]:
         return self._agents.get(agent_id)
+
+    # Tool management helpers
+
+    def list_tools(self) -> List[ToolConfig]:
+        return self._tool_store.list_tools()
+
+    def create_tool(self, tool_request: ToolCreateRequest) -> ToolConfig:
+        tool = ToolConfig(
+            id=0,
+            name=tool_request.name,
+            description=tool_request.description,
+            input_schema=tool_request.input_schema,
+            endpoint=tool_request.endpoint,
+            enabled=tool_request.enabled,
+            models=tool_request.models,
+            agents=tool_request.agents,
+        )
+        return self._tool_store.create_tool(tool)
+
+    def update_tool(self, tool_id: int, update_request: ToolUpdateRequest) -> Optional[ToolConfig]:
+        update_data = {
+            k: v
+            for k, v in update_request.model_dump(exclude_unset=True).items()
+            if v is not None
+        }
+        if not update_data:
+            return self._tool_store.get_tool(tool_id)
+        return self._tool_store.update_tool(tool_id, update_data)
+
+    def delete_tool(self, tool_id: int) -> bool:
+        return self._tool_store.delete_tool(tool_id)
+
+    def toggle_tool(self, tool_id: int) -> Optional[ToolConfig]:
+        return self._tool_store.toggle_tool(tool_id)
 
     async def generate(self, request: GenerateRequest) -> GenerateResponse:
         # Resolve agent and effective configuration

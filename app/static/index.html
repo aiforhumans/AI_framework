@@ -11,6 +11,12 @@
       <h1>LLM Testing Interface</h1>
     </header>
     <main>
+      <nav class="tabs">
+        <button class="tab-button active" data-tab="playground-tab">Playground</button>
+        <button class="tab-button" data-tab="tools-tab">Tools</button>
+      </nav>
+
+      <section id="playground-tab" class="tab-panel active">
       <section class="controls">
         <label>
           Agent
@@ -53,6 +59,68 @@
         <h2>Response</h2>
         <pre id="response-output"></pre>
         <div id="meta"></div>
+      </section>
+      </section>
+
+      <section id="tools-tab" class="tab-panel">
+        <h2>Tools</h2>
+        <div class="tools-layout">
+          <div class="tools-list">
+            <h3>Defined Tools</h3>
+            <table id="tools-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Enabled</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="tool-form">
+            <h3>Create / Edit Tool</h3>
+            <form id="tool-form">
+              <input type="hidden" id="tool-id" />
+              <label>
+                Name
+                <input type="text" id="tool-name" required />
+              </label>
+              <label>
+                Description
+                <textarea id="tool-description" rows="3"></textarea>
+              </label>
+              <label>
+                Endpoint
+                <input type="text" id="tool-endpoint" placeholder="/api/your-tool-endpoint" />
+              </label>
+              <label>
+                Models (comma separated)
+                <input type="text" id="tool-models" placeholder="model-1, model-2" />
+              </label>
+              <label>
+                Agents (comma separated)
+                <input type="text" id="tool-agents" placeholder="agent-1, agent-2" />
+              </label>
+              <label>
+                Input schema (JSON)
+                <textarea id="tool-input-schema" rows="4" placeholder='{"type": "object", "properties": {}}'></textarea>
+              </label>
+              <label class="inline">
+                <input type="checkbox" id="tool-enabled" checked />
+                Enabled
+              </label>
+              <div class="tool-form-actions">
+                <button type="submit">Save Tool</button>
+                <button type="button" id="tool-reset-btn">Reset</button>
+              </div>
+              <div id="tool-form-message" class="tool-message"></div>
+            </form>
+          </div>
+        </div>
       </section>
     </main>
   </div>
