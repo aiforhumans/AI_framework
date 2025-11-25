@@ -52,6 +52,7 @@ uvicorn app.main:app
 
 ### 2. Prompt Builder
 - Create reusable **prompt templates** with `{{variable}}` placeholders
+- **Preset template library** with Role-Play, Chain-of-Thought, Few-Shot, and General categories
 - Define system and user prompts separately
 - **Live preview** with variable substitution
 - Apply templates directly to Playground
@@ -89,7 +90,45 @@ uvicorn app.main:app
 - View step-by-step execution results and history
 - Persisted in `app/data/workflows.json`
 
-### 6. Tools Tab
+### 6. Multi-Turn Chat Lab
+- **Branching conversations** with tree visualization
+- Create alternative response branches from any message
+- **Switch between branches** to explore different paths
+- Track conversation state and history per branch
+- Compare outcomes across different conversation flows
+- Persisted in `app/data/chat_lab.json`
+
+### 7. Guardrail Tester
+- **Safety rule definitions** with pattern matching
+  - Regex patterns, keyword lists, LLM-based detection
+  - Rule categories: PII, profanity, toxic content, custom
+- **Test case management** for validation
+  - Define expected outcomes (blocked/allowed)
+  - Specify expected rule flags
+- **Real-time testing** with detailed flag results
+- **Test suite execution** with pass/fail reporting
+- Persisted in `app/data/guardrails.json`
+
+### 8. Request History & Replay
+- **Complete request/response logging** for all LLM calls
+- **Filter and search** by endpoint, model, success status, or content
+- **Star important entries** for quick reference
+- **Add notes** to entries for documentation
+- **Replay requests** with optional model/parameter overrides
+- **Compare original vs replay** responses
+- Statistics dashboard (success rate, latency, tokens)
+- Persisted in `app/data/history.json`
+
+### 9. Latency Dashboard
+- **Real-time performance metrics** tracking
+- **Charts and visualizations** for response times
+- **Model comparison** metrics
+- **Endpoint breakdowns** by usage
+- **Hourly trends** analysis
+- Configurable time range (1h, 6h, 24h, 7d)
+- Persisted in `app/data/metrics.json`
+
+### 10. Tools Tab
 - Define tools with name, description, endpoint, and input schema
 - Associate tools with specific models or agents
 - Toggle enabled/disabled state
@@ -99,24 +138,61 @@ uvicorn app.main:app
 
 ```
 app/
-├── main.py                 # FastAPI routes and endpoints
-├── models/
-│   ├── service.py          # LocalLLMService - core business logic
-│   ├── tools_store.py      # Tool persistence
+├── main.py                 # FastAPI app setup & router registration
+├── config.py               # Centralized configuration settings
+│
+├── routers/                # API endpoint routers (organized by feature)
+│   ├── __init__.py         # Router exports
+│   ├── playground.py       # /api/models, /api/generate, /api/chat
+│   ├── tools.py            # /api/tools/*
+│   ├── templates.py        # /api/prompt-templates/*
+│   ├── ab_test.py          # /api/ab-test
+│   ├── evaluation.py       # /api/datasets/*, /api/evaluators/*, /api/eval-jobs/*
+│   ├── workflows.py        # /api/workflows/*, /api/workflow-runs/*
+│   ├── guardrails.py       # /api/guardrails/*
+│   ├── chat_lab.py         # /api/chat-lab/*
+│   ├── history.py          # /api/history/*
+│   └── metrics.py          # /api/metrics/*
+│
+├── schemas/                # Pydantic request/response models
+│   ├── __init__.py
+│   ├── requests.py         # All API request models
+│   └── responses.py        # All API response models
+│
+├── services/               # Business logic services
+│   └── __init__.py         # Service exports
+│
+├── models/                 # Data models and persistence stores
+│   ├── service.py          # LocalLLMService - core LLM interaction
+│   ├── base_store.py       # Generic CRUD base class
+│   ├── tools_store.py      # Tool configuration persistence
+│   ├── prompt_templates_store.py  # Template storage with presets
 │   ├── eval_store.py       # Dataset, Evaluator, EvalJob models
 │   ├── evaluators.py       # Built-in evaluator functions
-│   └── workflow_store.py   # Workflow models and persistence
-├── static/
-│   ├── index.html          # Main UI with 6 tabs
-│   ├── main.js             # All frontend logic
+│   ├── workflow_store.py   # Workflow nodes, edges, runs
+│   ├── guardrail_store.py  # Guardrail rules and test cases
+│   ├── chat_lab_store.py   # Branching conversation trees
+│   ├── history_store.py    # Request/response logging
+│   └── metrics_store.py    # Performance metrics tracking
+│
+├── static/                 # Frontend assets
+│   ├── index.html          # Main UI with 10 tabs
+│   ├── main.js             # Frontend logic
 │   └── style.css           # Dark theme styling
+│
 └── data/                   # JSON persistence (auto-created)
     ├── tools.json
     ├── prompt_templates.json
     ├── datasets.json
-    ├── evaluators.json
+    ├── custom_evaluators.json
     ├── eval_jobs.json
-    └── workflows.json
+    ├── workflows.json
+    ├── workflow_runs.json
+    ├── guardrails.json
+    ├── guardrail_tests.json
+    ├── chat_lab.json
+    ├── history.json
+    └── metrics.json
 ```
 
 ## API Endpoints
@@ -141,6 +217,19 @@ app/
 | `/api/workflows/{id}` | GET/PUT/DELETE | Workflow CRUD |
 | `/api/workflows/{id}/run` | POST | Execute workflow |
 | `/api/workflow-runs` | GET | List workflow executions |
+| `/api/guardrails/rules` | GET/POST | Guardrail rule management |
+| `/api/guardrails/tests` | GET/POST | Guardrail test cases |
+| `/api/guardrails/check` | POST | Check text against rules |
+| `/api/guardrails/run-tests` | POST | Run test suite |
+| `/api/chat-lab/trees` | GET/POST | Conversation tree management |
+| `/api/chat-lab/trees/{id}/messages` | POST | Send chat message |
+| `/api/chat-lab/trees/{id}/branch` | POST | Create conversation branch |
+| `/api/history` | GET | List request history |
+| `/api/history/{id}` | GET/PUT/DELETE | History entry management |
+| `/api/history/replay` | POST | Replay a historical request |
+| `/api/history/stats` | GET | Get history statistics |
+| `/api/metrics` | GET | Get performance metrics |
+| `/api/metrics/summary` | GET | Get metrics summary |
 
 ## Local LLM Integration (LM Studio)
 
@@ -400,9 +489,9 @@ async def weather_tool(request: Request):
 
 ## Upcoming Features
 
-- **Latency Dashboard**: Response time tracking and performance metrics
-- **Guardrail Tester**: Safety filters and PII detection testing
-- **Template Modes**: Role-play, Chain-of-Thought, few-shot templates
-- **Multi-Turn Chat Lab**: Conversation simulation with branching paths
-- **History & Replay**: Request/response logging with replay capability
+- **Agent Memory**: Persistent context and knowledge storage for agents
+- **API Key Management**: Secure storage and rotation of API keys
+- **Export/Import**: Export workflows, datasets, and configurations
+- **Webhook Integration**: Trigger workflows from external events
+- **Custom Metrics**: Define and track custom performance metrics
 

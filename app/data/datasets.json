@@ -37,5 +37,77 @@
     ],
     "created_at": "2025-11-25T14:26:54.899912",
     "updated_at": "2025-11-25T14:26:59.694396"
+  },
+  {
+    "id": 2,
+    "name": "Code Generation Dataset",
+    "description": "Test code generation and programming tasks",
+    "rows": [
+      {
+        "query": "Write a Python function to calculate factorial of n.",
+        "response": "```python\ndef factorial(n):\n    \"\"\"\n    Calculate the factorial of a given number n.\n    \n    Args:\n        n (int): A non-negative integer.\n    \n    Returns:\n        int: The factorial of n.\n    \n    Raises:\n        ValueError: If n is negative.\n    \"\"\"\n    if n < 0:\n        raise ValueError(\"n must be a non-negative integer\")\n    elif n == 0 or n == 1:\n        return 1\n    else:\n        result = 1\n        for i in range(2, n + 1):\n            result *= i\n        return result\n```\n\nAlternatively, you can use recursion to calculate the factorial:\n\n```python\ndef factorial(n):\n    \"\"\"\n    Calculate the factorial of a given number n using recursion.\n    \n    Args:\n        n (int): A non-negative integer.\n    \n    Returns:\n        int: The factorial of n.\n    \n    Raises:\n        ValueError: If n is negative.\n    \"\"\"\n    if n < 0:\n        raise ValueError(\"n must be a non-negative integer\")\n    elif n == 0 or n == 1:\n        return",
+        "ground_truth": "def factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)",
+        "metadata": {}
+      },
+      {
+        "query": "Write a Python function to check if a string is a palindrome.",
+        "response": "```python\ndef is_palindrome(s):\n    \"\"\"\n    Check if a given string is a palindrome.\n\n    Args:\n        s (str): The input string.\n\n    Returns:\n        bool: True if the string is a palindrome, False otherwise.\n    \"\"\"\n    s = ''.join(c for c in s if c.isalnum()).lower()  # Remove non-alphanumeric characters and convert to lowercase\n    return s == s[::-1]  # Compare the string with its reverse\n\n# Example usage:\nprint(is_palindrome(\"A man, a plan, a canal: Panama\"))  # True\nprint(is_palindrome(\"hello\"))  # False\n```\n\nThis function works by first cleaning the input string to remove non-alphanumeric characters and converting it to lowercase. It then checks if the cleaned string is equal to its reverse (`s[::-1]`). If they are equal, the function returns `True`, indicating that the string is a palindrome; otherwise, it returns `False`.",
+        "ground_truth": "def is_palindrome(s):\n    return s == s[::-1]",
+        "metadata": {}
+      },
+      {
+        "query": "Write a Python function to find the maximum value in a list.",
+        "response": "```python\ndef find_max_value(lst):\n    \"\"\"\n    Returns the maximum value in a given list.\n\n    Args:\n        lst (list): A list of numbers.\n\n    Returns:\n        int or float: The maximum value in the list. If the list is empty, returns None.\n    \n    Raises:\n        ValueError: If the input list is not a list or contains non-numeric values.\n    \"\"\"\n    if not isinstance(lst, list):\n        raise ValueError(\"Input must be a list\")\n    \n    try:\n        return max(lst)\n    except TypeError:\n        raise ValueError(\"List must only contain numeric values\")\n\n# Example usage:\nnumbers = [12, 45, 7, 23, 56, 89, 34]\nmax_value = find_max_value(numbers)\nprint(max_value)  # Output: 89\n```\n\nAlternatively, you can use the `reduce` function from the `functools` module to achieve the same result in a more functional programming style:\n\n```python\nfrom functools import reduce\n\ndef find_max_value(lst):\n    if not isinstance(lst, list):\n        raise ValueError(\"Input must be",
+        "ground_truth": "def find_max(lst):\n    return max(lst)",
+        "metadata": {}
+      },
+      {
+        "query": "Write a Python function to reverse a string.",
+        "response": "Here's a simple Python function that uses slicing to reverse a string:\n\n```python\ndef reverse_string(s):\n    return s[::-1]\n```\n\nThis function works by creating a new string that is the reverse of the input string `s`. The `[::-1]` slice means \"start at the end of the string and end at position 0, move with the step -1\", effectively reversing the string.\n\nAlternatively, you can use the `reversed` function in combination with `join` to achieve the same result:\n\n```python\ndef reverse_string(s):\n    return ''.join(reversed(s))\n```\n\nOr, using a loop:\n\n```python\ndef reverse_string(s):\n    result = []\n    for char in s:\n        result.append(char)\n    return ''.join(result[::-1])\n```\n\nHowever, the slicing method is generally the most concise and efficient way to reverse a string in Python.",
+        "ground_truth": "def reverse_string(s):\n    return s[::-1]",
+        "metadata": {}
+      }
+    ],
+    "created_at": "2025-11-25T18:28:11.974454",
+    "updated_at": "2025-11-25T18:28:56.854668"
+  },
+  {
+    "id": 3,
+    "name": "Sentiment Analysis Dataset",
+    "description": "Test sentiment classification accuracy",
+    "rows": [
+      {
+        "query": "Classify the sentiment: I absolutely love this product! Best purchase ever.",
+        "response": "The sentiment of the sentence \"I absolutely love this product! Best purchase ever.\" is overwhelmingly positive. The words used convey strong enthusiasm and satisfaction, highlighting both the personal affection (\"absolutely love\") and the exceptional value (\"Best purchase ever\"). There are no negative expressions or reservations mentioned, which reinforces the overall positive sentiment.",
+        "ground_truth": "positive",
+        "metadata": {}
+      },
+      {
+        "query": "Classify the sentiment: This is the worst experience I've ever had. Terrible service.",
+        "response": "The sentiment expressed in this statement is negative. The phrases \"worst experience\" and \"terrible service\" clearly indicate a strong dissatisfaction or disappointment, which are negative emotions and sentiments.",
+        "ground_truth": "negative",
+        "metadata": {}
+      },
+      {
+        "query": "Classify the sentiment: The movie was okay, nothing special but not bad either.",
+        "response": "The sentiment expressed in this sentence is mildly positive to neutral. The phrase \"okay\" and \"not bad either\" indicate a lack of strong enthusiasm or excitement about the movie, but they also suggest it's not entirely disappointing or terrible. This implies that while there were some decent aspects, the overall impression was not particularly impressive or memorable, which can be considered a neutral-to-slightly positive sentiment.",
+        "ground_truth": "neutral",
+        "metadata": {}
+      },
+      {
+        "query": "Classify the sentiment: Amazing quality and fast shipping! Highly recommend!",
+        "response": "The sentiment is positive. The phrases \"Amazing quality,\" \"fast shipping,\" and \"Highly recommend\" all convey satisfaction and enthusiasm, indicating a favorable opinion of the product or service being discussed.",
+        "ground_truth": "positive",
+        "metadata": {}
+      },
+      {
+        "query": "Classify the sentiment: Disappointed with the results. Would not buy again.",
+        "response": "The sentiment expressed in this statement is negative. The person feels disappointed with the outcomes and has a strong intention to refrain from purchasing products or services again.",
+        "ground_truth": "negative",
+        "metadata": {}
+      }
+    ],
+    "created_at": "2025-11-25T18:29:28.725721",
+    "updated_at": "2025-11-25T18:29:40.917442"
   }
 ]

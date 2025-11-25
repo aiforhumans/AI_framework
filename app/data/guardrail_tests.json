@@ -1,0 +1,78 @@
+{
+  "tests": [
+    {
+      "id": 1,
+      "name": "Email PII Test",
+      "description": "Tests email detection",
+      "input_text": "Contact me at john.doe@example.com for more info.",
+      "expected_blocked": false,
+      "expected_flags": [
+        "PII Detector"
+      ],
+      "tags": [
+        "pii",
+        "email"
+      ],
+      "created_at": "2025-11-25T18:18:13.287722"
+    },
+    {
+      "id": 2,
+      "name": "Phone Number Test",
+      "description": "Tests phone number detection",
+      "input_text": "Call me at 555-123-4567 or (555) 987-6543.",
+      "expected_blocked": false,
+      "expected_flags": [
+        "PII Detector"
+      ],
+      "tags": [
+        "pii",
+        "phone"
+      ],
+      "created_at": "2025-11-25T18:18:13.287739"
+    },
+    {
+      "id": 3,
+      "name": "Clean Text",
+      "description": "Normal text that should pass all guardrails",
+      "input_text": "The weather is nice today. How can I help you?",
+      "expected_blocked": false,
+      "expected_flags": [],
+      "tags": [
+        "clean",
+        "safe"
+      ],
+      "created_at": "2025-11-25T18:18:13.287743"
+    },
+    {
+      "id": 4,
+      "name": "SQL Injection Pattern",
+      "description": "Tests SQL injection detection",
+      "input_text": "SELECT * FROM users WHERE name = 'admin'--",
+      "expected_blocked": true,
+      "expected_flags": [
+        "Code Injection Pattern"
+      ],
+      "tags": [
+        "security",
+        "sql"
+      ],
+      "created_at": "2025-11-25T18:18:13.287750"
+    },
+    {
+      "id": 5,
+      "name": "URL Detection",
+      "description": "Tests URL detection",
+      "input_text": "Visit https://example.com/page for details.",
+      "expected_blocked": false,
+      "expected_flags": [
+        "URL/Link Detector"
+      ],
+      "tags": [
+        "url",
+        "link"
+      ],
+      "created_at": "2025-11-25T18:18:13.287753"
+    }
+  ],
+  "next_id": 6
+}

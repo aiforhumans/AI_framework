@@ -1,0 +1,56 @@
+{
+  "trees": [
+    {
+      "id": 1,
+      "name": "r",
+      "description": "",
+      "model_name": "liquid/lfm2-1.2b",
+      "system_prompt": "",
+      "root_node_id": "node_1764092439704_0",
+      "nodes": {
+        "node_1764092439704_0": {
+          "id": "node_1764092439704_0",
+          "parent_id": null,
+          "message": {
+            "id": "msg_node_1764092439704_0",
+            "role": "user",
+            "content": "yu",
+            "timestamp": 1764092439.7042,
+            "metadata": {}
+          },
+          "children": [
+            "node_1764092440714_1"
+          ],
+          "is_active": true,
+          "branch_name": null
+        },
+        "node_1764092440714_1": {
+          "id": "node_1764092440714_1",
+          "parent_id": "node_1764092439704_0",
+          "message": {
+            "id": "msg_node_1764092440714_1",
+            "role": "assistant",
+            "content": "It seems like you've entered \"yu\" which could be a few things depending on the context:\n\n1. **A Name**: In some cultures, \"yu\" is a name or a given name.\n2. **A Symbol**: It can be used as a symbol, possibly in Japanese or Chinese contexts where it might represent something like \u7389 (j\u016b), meaning jade, or be part of a character's name.\n3. **A Character Name**: In games or anime, \"yu\" could be a character name, such as Yu Narukami from the game \"Yu Yu Hakusho.\"\n4. **A Code or Abbreviation**: It might be part of a code or abbreviation in a specific context.\n\nIf you have more context about where you encountered \"yu,\" I can provide a more detailed and accurate response!",
+            "timestamp": 1764092440.7142227,
+            "metadata": {
+              "latency_ms": 1009.5784664154053,
+              "model": "liquid/lfm2-1.2b",
+              "prompt_tokens": 10,
+              "completion_tokens": 177,
+              "total_tokens": 187
+            }
+          },
+          "children": [],
+          "is_active": true,
+          "branch_name": null
+        }
+      },
+      "active_path": [
+        "node_1764092439704_0",
+        "node_1764092440714_1"
+      ],
+      "created_at": 1764092424.2297843,
+      "updated_at": 1764092487.619604
+    }
+  ]
+}
