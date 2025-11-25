@@ -152,6 +152,252 @@ This project uses LM Studio's OpenAI-compatible HTTP API:
 
 To use a different backend (Ollama, vLLM, etc.), modify `LocalLLMService` in `app/models/service.py`.
 
+---
+
+## Advanced Tool Instructions & Examples
+
+### Creating Tools
+
+Tools extend agent capabilities by connecting to external endpoints. Each tool has:
+
+| Field | Description |
+|-------|-------------|
+| **Name** | Unique identifier (e.g., `web_search`, `calculator`) |
+| **Description** | What the tool does (shown to agents for tool selection) |
+| **Endpoint** | API URL to call when tool is invoked |
+| **Input Schema** | JSON Schema defining expected parameters |
+| **Models/Agents** | Which models or agents can use this tool |
+
+### Example Tool Definitions
+
+#### 1. Web Search Tool
+```json
+{
+  "name": "web_search",
+  "description": "Search the web for current information. Use for questions about recent events, facts, or topics requiring up-to-date data.",
+  "endpoint": "https://api.example.com/search",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "The search query"
+      },
+      "num_results": {
+        "type": "integer",
+        "description": "Number of results to return",
+        "default": 5
+      }
+    },
+    "required": ["query"]
+  },
+  "enabled": true
+}
+```
+
+#### 2. Calculator Tool
+```json
+{
+  "name": "calculator",
+  "description": "Perform mathematical calculations. Use for arithmetic, algebra, or any numeric computation.",
+  "endpoint": "/api/tools/calculator",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "expression": {
+        "type": "string",
+        "description": "Mathematical expression to evaluate (e.g., '2 + 2 * 3')"
+      }
+    },
+    "required": ["expression"]
+  },
+  "enabled": true
+}
+```
+
+#### 3. Database Query Tool
+```json
+{
+  "name": "query_database",
+  "description": "Query the product database. Use to look up inventory, prices, or product details.",
+  "endpoint": "/api/tools/db-query",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "table": {
+        "type": "string",
+        "enum": ["products", "orders", "customers"],
+        "description": "Database table to query"
+      },
+      "filters": {
+        "type": "object",
+        "description": "Key-value pairs for filtering results"
+      },
+      "limit": {
+        "type": "integer",
+        "default": 10
+      }
+    },
+    "required": ["table"]
+  },
+  "enabled": true,
+  "agents": ["sales-agent", "support-agent"]
+}
+```
+
+#### 4. Code Execution Tool
+```json
+{
+  "name": "run_python",
+  "description": "Execute Python code in a sandboxed environment. Use for data processing, calculations, or generating outputs.",
+  "endpoint": "/api/tools/python-sandbox",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "code": {
+        "type": "string",
+        "description": "Python code to execute"
+      },
+      "timeout": {
+        "type": "integer",
+        "description": "Maximum execution time in seconds",
+        "default": 30
+      }
+    },
+    "required": ["code"]
+  },
+  "enabled": true,
+  "models": ["gpt-4", "claude-3"]
+}
+```
+
+#### 5. Email Sender Tool
+```json
+{
+  "name": "send_email",
+  "description": "Send an email to a recipient. Use when user explicitly requests to send an email.",
+  "endpoint": "/api/tools/email",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "to": {
+        "type": "string",
+        "format": "email",
+        "description": "Recipient email address"
+      },
+      "subject": {
+        "type": "string",
+        "description": "Email subject line"
+      },
+      "body": {
+        "type": "string",
+        "description": "Email body content (plain text or HTML)"
+      },
+      "cc": {
+        "type": "array",
+        "items": { "type": "string", "format": "email" },
+        "description": "CC recipients"
+      }
+    },
+    "required": ["to", "subject", "body"]
+  },
+  "enabled": true
+}
+```
+
+### Using Tools in Workflows (Orchestrator)
+
+In the Agent Orchestrator, tools are integrated as **Tool Nodes**:
+
+1. **Add a Tool Node** to your workflow canvas
+2. **Configure the node**:
+   - Set `Tool ID` to match your tool name (e.g., `web_search`)
+   - Set `Input Template` using variables:
+     ```
+     {"query": "{{prev_output}}"}
+     ```
+3. **Connect edges** from Agent nodes to Tool nodes
+
+#### Workflow Example: Research Assistant
+
+```
+[Start] → [Agent: Parse Query] → [Tool: web_search] → [Agent: Summarize] → [End]
+```
+
+**Node Configurations:**
+
+- **Agent: Parse Query**
+  - Prompt: `Extract the main search topic from: {{input}}`
+  
+- **Tool: web_search**
+  - Input Template: `{"query": "{{prev_output}}", "num_results": 3}`
+  
+- **Agent: Summarize**
+  - Prompt: `Summarize these search results:\n{{prev_output}}`
+
+### Conditional Tool Selection
+
+Use **Condition Nodes** to dynamically choose tools:
+
+```
+[Start] → [Agent: Classify] → [Condition: contains:math] 
+                                    ├─ Yes → [Tool: calculator]
+                                    └─ No  → [Tool: web_search]
+```
+
+**Condition expressions:**
+- `contains:math` - Check if output contains "math"
+- `equals:search` - Exact match
+- `startswith:calculate` - Prefix match
+- `>:100` - Numeric comparison (for scores/counts)
+
+### Best Practices
+
+1. **Write clear descriptions** - Agents use descriptions to decide when to call tools
+2. **Define strict schemas** - Validate inputs with required fields and types
+3. **Use enums for fixed options** - Prevents invalid inputs
+4. **Set reasonable defaults** - Reduce required parameters
+5. **Scope to specific agents** - Not all tools should be available to all agents
+6. **Test with A/B Tester** - Compare tool-enabled vs tool-disabled responses
+7. **Monitor in Evaluation** - Create datasets to test tool usage accuracy
+
+### Implementing Tool Endpoints
+
+Tool endpoints receive POST requests with the input data:
+
+```python
+# Example: Add to app/main.py
+
+@app.post("/api/tools/calculator")
+async def calculator_tool(request: Request):
+    data = await request.json()
+    expression = data.get("expression", "")
+    
+    try:
+        # WARNING: Use a safe evaluator in production!
+        result = eval(expression)
+        return {"result": result, "success": True}
+    except Exception as e:
+        return {"error": str(e), "success": False}
+
+@app.post("/api/tools/weather")
+async def weather_tool(request: Request):
+    data = await request.json()
+    location = data.get("location", "")
+    
+    # Call external weather API
+    # weather_data = await fetch_weather(location)
+    
+    return {
+        "location": location,
+        "temperature": "72°F",
+        "conditions": "Sunny",
+        "success": True
+    }
+```
+
+---
+
 ## Upcoming Features
 
 - **Latency Dashboard**: Response time tracking and performance metrics
