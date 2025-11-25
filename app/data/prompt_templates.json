@@ -1,0 +1,52 @@
+[
+  {
+    "id": 2,
+    "name": "Test",
+    "description": "test model",
+    "system_prompt": "help test",
+    "user_prompt": "ss",
+    "variables": []
+  },
+  {
+    "id": 3,
+    "name": "Test",
+    "description": "test model",
+    "system_prompt": "help test",
+    "user_prompt": "ss",
+    "variables": []
+  },
+  {
+    "id": 4,
+    "name": "xxxx",
+    "description": "xxx",
+    "system_prompt": "xxxxx",
+    "user_prompt": "aaaaaa",
+    "variables": [
+      "mark"
+    ]
+  },
+  {
+    "id": 5,
+    "name": "s",
+    "description": "s",
+    "system_prompt": "f",
+    "user_prompt": "f",
+    "variables": [
+      "f",
+      "a",
+      "a"
+    ]
+  },
+  {
+    "id": 6,
+    "name": "{{sss}}",
+    "description": "s",
+    "system_prompt": "f",
+    "user_prompt": "f",
+    "variables": [
+      "f",
+      "a",
+      "a"
+    ]
+  }
+]

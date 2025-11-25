@@ -13,53 +13,140 @@
     <main>
       <nav class="tabs">
         <button class="tab-button active" data-tab="playground-tab">Playground</button>
+        <button class="tab-button" data-tab="prompt-builder-tab">Prompt Builder</button>
+        <button class="tab-button" data-tab="ab-tester-tab">A/B Tester</button>
+        <button class="tab-button" data-tab="evaluation-tab">Evaluation</button>
         <button class="tab-button" data-tab="tools-tab">Tools</button>
       </nav>
 
       <section id="playground-tab" class="tab-panel active">
-      <section class="controls">
-        <label>
-          Agent
-          <select id="agent-select">
-            {% for a in agents %}
-            <option value="{{ a.id }}" data-instructions="{{ a.instructions }}">{{ a.name }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label>
-          Model
-          <select id="model-select">
-            <option value="">(From agent)</option>
-            {% for m in available_models %}
-            <option value="{{ m }}">{{ m }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label>
-          Max tokens
-          <input type="number" id="max-tokens" value="256" min="1" />
-        </label>
-        <label>
-          Temperature
-          <input type="number" id="temperature" value="" step="0.1" min="0" max="2" placeholder="(From agent)" />
-        </label>
-      </section>
+        <div class="playground-header">
+          <h2>Interactive Playground</h2>
+          <p class="helper-text">Real-time model testing with multi-turn chat, prompt improvement, and attachment support.</p>
+        </div>
 
-      <section class="instructions-section">
-        <h2>Agent Instructions</h2>
-        <textarea id="agent-instructions" readonly></textarea>
-      </section>
+        <div class="playground-layout">
+          <!-- Left: Controls & System Prompt -->
+          <div class="playground-sidebar">
+            <div class="playground-controls">
+              <h3>Configuration</h3>
+              <label>
+                Agent
+                <select id="agent-select">
+                  {% for a in agents %}
+                  <option value="{{ a.id }}" data-instructions="{{ a.instructions }}">{{ a.name }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label>
+                Model
+                <select id="model-select">
+                  <option value="">(From agent)</option>
+                  {% for m in available_models %}
+                  <option value="{{ m }}">{{ m }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <div class="param-row">
+                <label>
+                  Max tokens
+                  <input type="number" id="max-tokens" value="256" min="1" />
+                </label>
+                <label>
+                  Temperature
+                  <input type="number" id="temperature" value="" step="0.1" min="0" max="2" placeholder="0.7" />
+                </label>
+              </div>
+            </div>
 
-      <section class="prompt-section">
-        <textarea id="prompt" placeholder="Type your prompt here..."></textarea>
-        <button id="run-btn">Run</button>
-      </section>
+            <div class="system-prompt-section">
+              <div class="section-header">
+                <h3>System Instructions</h3>
+                <button type="button" id="improve-system-btn" class="improve-btn" title="Improve with AI">✨ Improve</button>
+              </div>
+              <textarea id="agent-instructions" placeholder="Enter system instructions to guide the model's behavior..."></textarea>
+              <div class="char-count"><span id="system-char-count">0</span> characters</div>
+            </div>
 
-      <section class="response-section">
-        <h2>Response</h2>
-        <pre id="response-output"></pre>
-        <div id="meta"></div>
-      </section>
+            <div class="playground-options">
+              <label class="checkbox-label">
+                <input type="checkbox" id="chat-mode" checked />
+                Multi-turn chat mode
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="stream-mode" checked />
+                Stream responses
+              </label>
+              <button type="button" id="clear-chat-btn" class="secondary-btn">Clear Chat</button>
+            </div>
+          </div>
+
+          <!-- Right: Chat Interface -->
+          <div class="playground-chat">
+            <div class="chat-messages" id="chat-messages">
+              <div class="chat-welcome">
+                <div class="welcome-icon">💬</div>
+                <h3>Start a Conversation</h3>
+                <p>Type a message below to begin testing. Use the ✨ Improve button to enhance your prompts with AI.</p>
+              </div>
+            </div>
+
+            <div class="chat-input-area">
+              <div class="attachments-bar" id="attachments-bar" style="display:none;">
+                <div id="attachments-list"></div>
+              </div>
+              <div class="chat-input-container">
+                <div class="input-actions-left">
+                  <button type="button" id="attach-btn" class="icon-btn" title="Add attachment">📎</button>
+                  <input type="file" id="file-input" accept="image/*,.txt,.json,.md" multiple style="display:none;" />
+                </div>
+                <div class="prompt-input-wrapper">
+                  <textarea id="prompt" placeholder="Type your message here..." rows="1"></textarea>
+                  <button type="button" id="improve-prompt-btn" class="improve-btn-inline" title="Improve prompt with AI">✨</button>
+                </div>
+                <div class="input-actions-right">
+                  <button id="run-btn" class="send-btn" title="Send message">
+                    <span class="send-icon">▶</span>
+                  </button>
+                </div>
+              </div>
+              <div class="input-hints">
+                <span>Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line</span>
+                <span id="prompt-char-count">0 chars</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Prompt Generator Modal -->
+        <div id="prompt-generator-modal" class="modal" style="display:none;">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>✨ Prompt Generator</h3>
+              <button type="button" class="modal-close" id="prompt-generator-close">&times;</button>
+            </div>
+            <div class="modal-body">
+              <p class="helper-text">Describe your task or paste an existing prompt to improve. The AI will generate an optimized prompt following best practices.</p>
+              <label>
+                Your task or prompt to improve:
+                <textarea id="prompt-generator-input" rows="6" placeholder="Example: Create a prompt that helps users write professional emails..."></textarea>
+              </label>
+              <div class="modal-actions">
+                <button type="button" id="prompt-generator-run" class="primary-btn">Generate Improved Prompt</button>
+              </div>
+              <div id="prompt-generator-status" class="eval-message"></div>
+              <div id="prompt-generator-result" style="display:none;">
+                <h4>Generated Prompt:</h4>
+                <pre id="prompt-generator-output"></pre>
+                <div class="modal-actions">
+                  <button type="button" id="prompt-generator-use-system" class="secondary-btn">Use as System Prompt</button>
+                  <button type="button" id="prompt-generator-use-message" class="secondary-btn">Use as Message</button>
+                  <button type="button" id="prompt-generator-copy" class="secondary-btn">Copy to Clipboard</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section id="tools-tab" class="tab-panel">
@@ -119,6 +206,308 @@
               </div>
               <div id="tool-form-message" class="tool-message"></div>
             </form>
+          </div>
+        </div>
+      </section>
+
+      <section id="ab-tester-tab" class="tab-panel">
+        <h2>A/B Response Tester</h2>
+        <p class="helper-text">Compare responses from different models or agents side-by-side.</p>
+
+        <div class="ab-tester-layout">
+          <div class="ab-input">
+            <label>
+              Prompt
+              <textarea id="ab-prompt" rows="4" placeholder="Enter your test prompt..."></textarea>
+            </label>
+            <label>
+              System prompt (optional)
+              <textarea id="ab-system-prompt" rows="2" placeholder="Optional system instructions..."></textarea>
+            </label>
+
+            <div class="ab-variants">
+              <h3>Variants</h3>
+              <p class="helper-text">Select 2+ models or agents to compare.</p>
+              <div id="ab-variants-list"></div>
+              <div class="ab-add-variant">
+                <select id="ab-add-variant-select">
+                  <option value="">-- Add variant --</option>
+                  <optgroup label="Models" id="ab-models-group">
+                    {% for m in available_models %}
+                    <option value="model:{{ m }}">{{ m }}</option>
+                    {% endfor %}
+                  </optgroup>
+                  <optgroup label="Agents" id="ab-agents-group">
+                    {% for a in agents %}
+                    <option value="agent:{{ a.id }}">{{ a.name }}</option>
+                    {% endfor %}
+                  </optgroup>
+                </select>
+              </div>
+            </div>
+
+            <button type="button" id="ab-run-btn">Run A/B Test</button>
+            <div id="ab-message" class="ab-message"></div>
+          </div>
+
+          <div class="ab-results">
+            <h3>Results</h3>
+            <div id="ab-results-container"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="evaluation-tab" class="tab-panel">
+        <h2>Evaluation Suite</h2>
+        <p class="helper-text">Evaluate models and agents against datasets using built-in or custom evaluators.</p>
+
+        <div class="eval-layout">
+          <!-- Left Column: Datasets & Evaluators -->
+          <div class="eval-sidebar">
+            <div class="eval-datasets">
+              <h3>Datasets</h3>
+              <table id="datasets-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Rows</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+              <button type="button" id="dataset-new-btn">New Dataset</button>
+            </div>
+
+            <div class="eval-evaluators">
+              <h3>Evaluators</h3>
+              <div id="evaluators-list"></div>
+              <button type="button" id="evaluator-new-btn">Create Custom Evaluator</button>
+            </div>
+          </div>
+
+          <!-- Middle Column: Dataset Editor / Evaluator Editor -->
+          <div class="eval-editor">
+            <div id="dataset-editor" class="eval-editor-section">
+              <h3>Dataset Editor</h3>
+              <form id="dataset-form">
+                <input type="hidden" id="dataset-id" />
+                <label>
+                  Name
+                  <input type="text" id="dataset-name" required />
+                </label>
+                <label>
+                  Description
+                  <textarea id="dataset-description" rows="2"></textarea>
+                </label>
+                <div class="dataset-template-section">
+                  <label>
+                    Load Template
+                    <select id="dataset-template-select">
+                      <option value="">-- Select a template --</option>
+                      <option value="qa-factual">Q&A - Factual Knowledge</option>
+                      <option value="qa-math">Q&A - Math Problems</option>
+                      <option value="summarization">Summarization</option>
+                      <option value="sentiment">Sentiment Analysis</option>
+                      <option value="translation">Translation</option>
+                      <option value="code-generation">Code Generation</option>
+                      <option value="classification">Text Classification</option>
+                      <option value="rag">RAG - Retrieval QA</option>
+                    </select>
+                  </label>
+                </div>
+                <label>
+                  Rows (JSONL format: one {"query": "", "ground_truth": ""} per line)
+                  <textarea id="dataset-rows" rows="8" placeholder='{"query": "What is 2+2?", "ground_truth": "4"}
+{"query": "Capital of France?", "ground_truth": "Paris"}'></textarea>
+                </label>
+                <div class="eval-form-actions">
+                  <button type="submit">Save Dataset</button>
+                  <button type="button" id="dataset-reset-btn">Reset</button>
+                </div>
+                <div id="dataset-message" class="eval-message"></div>
+              </form>
+
+              <div class="bulk-run-section">
+                <h4>Bulk Run</h4>
+                <p class="helper-text">Generate responses for all queries using a model or agent.</p>
+                <div class="bulk-run-controls">
+                  <select id="bulk-run-model">
+                    <option value="">-- Select Model --</option>
+                    {% for m in available_models %}
+                    <option value="{{ m }}">{{ m }}</option>
+                    {% endfor %}
+                  </select>
+                  <select id="bulk-run-agent">
+                    <option value="">-- Or Agent --</option>
+                    {% for a in agents %}
+                    <option value="{{ a.id }}">{{ a.name }}</option>
+                    {% endfor %}
+                  </select>
+                  <button type="button" id="bulk-run-btn">Run Bulk Generate</button>
+                </div>
+                <div id="bulk-run-message" class="eval-message"></div>
+                <div id="bulk-run-progress" class="bulk-run-progress" style="display:none;">
+                  <div class="progress-bar-container">
+                    <div id="bulk-run-progress-bar" class="progress-bar"></div>
+                  </div>
+                  <div id="bulk-run-progress-text"></div>
+                </div>
+                <div id="bulk-run-live" class="bulk-run-live" style="display:none;">
+                  <h5>Live Responses</h5>
+                  <div id="bulk-run-live-list"></div>
+                </div>
+              </div>
+            </div>
+
+            <div id="evaluator-editor" class="eval-editor-section" style="display:none;">
+              <h3>Custom Evaluator Editor</h3>
+              <form id="evaluator-form">
+                <input type="hidden" id="evaluator-id" />
+                <label>
+                  Name
+                  <input type="text" id="evaluator-name" required />
+                </label>
+                <label>
+                  Description
+                  <textarea id="evaluator-description" rows="2"></textarea>
+                </label>
+                <label>
+                  Type
+                  <select id="evaluator-type">
+                    <option value="llm">LLM-based</option>
+                    <option value="code">Code-based (Python)</option>
+                  </select>
+                </label>
+                <div id="evaluator-llm-section">
+                  <label>
+                    LLM Prompt
+                    <textarea id="evaluator-llm-prompt" rows="6" placeholder='Evaluate the response: "{{response}}" against the expected: "{{ground_truth}}". Return JSON: {"score": 0-1, "reason": "..."}'></textarea>
+                  </label>
+                </div>
+                <div id="evaluator-code-section" style="display:none;">
+                  <label>
+                    Python Code
+                    <textarea id="evaluator-code" rows="8" placeholder='def evaluate(query, response, ground_truth, **kwargs):
+    # Your evaluation logic
+    score = 1.0 if response.strip() == ground_truth.strip() else 0.0
+    return {"score": score, "reason": "Exact match check"}'></textarea>
+                  </label>
+                </div>
+                <div class="eval-form-actions">
+                  <button type="submit">Save Evaluator</button>
+                  <button type="button" id="evaluator-cancel-btn">Cancel</button>
+                </div>
+                <div id="evaluator-message" class="eval-message"></div>
+              </form>
+            </div>
+          </div>
+
+          <!-- Right Column: Evaluation Jobs -->
+          <div class="eval-jobs">
+            <h3>Evaluation Jobs</h3>
+            <div class="new-eval-job">
+              <h4>New Evaluation</h4>
+              <label>
+                Job Name
+                <input type="text" id="eval-job-name" placeholder="My Evaluation" />
+              </label>
+              <label>
+                Dataset
+                <select id="eval-job-dataset"></select>
+              </label>
+              <label>
+                Evaluators (select multiple)
+                <select id="eval-job-evaluators" multiple size="5"></select>
+              </label>
+              <button type="button" id="eval-job-create-btn">Create & Run Evaluation</button>
+              <div id="eval-job-message" class="eval-message"></div>
+            </div>
+
+            <div class="eval-job-history">
+              <h4>Job History</h4>
+              <div id="eval-jobs-list"></div>
+            </div>
+
+            <div id="eval-results-view" style="display:none;">
+              <h4>Results: <span id="eval-results-title"></span></h4>
+              <div id="eval-aggregate-scores"></div>
+              <table id="eval-results-table">
+                <thead>
+                  <tr>
+                    <th>Row</th>
+                    <th>Evaluator</th>
+                    <th>Score</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+              <button type="button" id="eval-results-close-btn">Close</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="prompt-builder-tab" class="tab-panel">
+        <h2>Prompt Builder</h2>
+        <div class="prompt-builder-layout">
+          <div class="prompt-templates">
+            <h3>Templates</h3>
+            <table id="prompt-templates-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <button type="button" id="prompt-template-new-btn">New Template</button>
+          </div>
+
+          <div class="prompt-template-editor">
+            <h3>Create / Edit Template</h3>
+            <form id="prompt-template-form">
+              <input type="hidden" id="prompt-template-id" />
+              <label>
+                Name
+                <input type="text" id="prompt-template-name" required />
+              </label>
+              <label>
+                Description
+                <textarea id="prompt-template-description" rows="2"></textarea>
+              </label>
+              <label>
+                System prompt
+                <textarea id="prompt-template-system" rows="3" placeholder="System-level instructions..."></textarea>
+              </label>
+              <label>
+                User prompt
+                <textarea id="prompt-template-user" rows="4" placeholder="User prompt, you can use {{variable}} placeholders"></textarea>
+              </label>
+              <label>
+                Variables (comma separated)
+                <input type="text" id="prompt-template-variables" placeholder="name, topic, tone" />
+              </label>
+              <div class="prompt-template-actions">
+                <button type="submit">Save Template</button>
+                <button type="button" id="prompt-template-reset-btn">Reset</button>
+              </div>
+              <div id="prompt-template-message" class="prompt-message"></div>
+            </form>
+
+            <h3>Preview & Run</h3>
+            <div class="prompt-preview">
+              <label>
+                Variable values (JSON)
+                <textarea id="prompt-template-vars-json" rows="4" placeholder='{"name": "Alex", "topic": "fractions"}'></textarea>
+              </label>
+              <button type="button" id="prompt-template-apply-btn">Apply to Playground</button>
+              <pre id="prompt-template-preview"></pre>
+            </div>
           </div>
         </div>
       </section>

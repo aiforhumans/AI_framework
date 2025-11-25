@@ -1,0 +1,41 @@
+[
+  {
+    "id": 1,
+    "name": "Factual Q&A Dataset",
+    "description": "Test factual knowledge and accuracy",
+    "rows": [
+      {
+        "query": "What is the capital of France?",
+        "response": "The capital of France is Paris. It is located in the northern central part of the country, on the Seine River, and serves as the political, economic, cultural, and historical center of France. Paris is known for its iconic landmarks such as the Eiffel Tower, Louvre Museum, Notre-Dame Cathedral, and Champs-\u00c9lys\u00e9es avenue.",
+        "ground_truth": "Paris",
+        "metadata": {}
+      },
+      {
+        "query": "Who wrote Romeo and Juliet?",
+        "response": "Romeo and Juliet was written by the Italian poet William Shakespeare, born in 1564. He is one of the most influential playwrights and poets in the English language. The play is part of a larger work called The Tragedy of Romeo and Juliet, which includes two more plays: The Capulet's Vision and The Mourning of Romeo. Shakespeare is credited with writing these works, although the exact date of his birth and death are uncertain. The play was first performed in London around 1597 or 1598, likely based on a story that may have been originally written by another playwright, possibly Christopher Marlowe. However, Shakespeare's version became the definitive form for centuries.",
+        "ground_truth": "William Shakespeare",
+        "metadata": {}
+      },
+      {
+        "query": "What is the largest planet in our solar system?",
+        "response": "The largest planet in our solar system is Jupiter. It has a diameter of 142,984 km (88,846 miles), making it about 11 times wider than Earth. Jupiter is also a gas giant and is composed mostly of hydrogen and helium. It has a deep brown color due to compounds like ammonia and methane in its atmosphere.",
+        "ground_truth": "Jupiter",
+        "metadata": {}
+      },
+      {
+        "query": "In what year did World War II end?",
+        "response": "World War II ended in 1945. The war officially concluded with the surrender of Japan, but the formal surrender of Germany took place on May 7, 1945, and the formal surrender of Italy on September 8, 1945, which are also sometimes cited as the end of the war. However, the year commonly referenced as the end of World War II is 1945 because it marks the cessation of hostilities in all major theaters of the war. This is when the Potsdam Declaration was issued and the Allies began to plan for the post-war order.\n\nFor a more precise date in terms of military cessation, the end of the fighting in Europe was marked by V-E Day (Victory in Europe) on May 8-9, 1945, while Japan officially surrendered on September 2, 1945, following the dropping of atomic bombs on Hiroshima and Nagasaki and the Soviet Union's announcement of its own surrender.",
+        "ground_truth": "1945",
+        "metadata": {}
+      },
+      {
+        "query": "What is the chemical symbol for gold?",
+        "response": "The chemical symbol for gold is Au. This symbol is derived from the Latin word for gold, \"aurum\". Gold is a chemical element with the atomic number 79 and belongs to the group 14 of the periodic table. Its stability and resistance to corrosion make it a valuable metal in various industries, including jewelry, electronics, and medicine.",
+        "ground_truth": "Au",
+        "metadata": {}
+      }
+    ],
+    "created_at": "2025-11-25T14:26:54.899912",
+    "updated_at": "2025-11-25T14:26:59.694396"
+  }
+]
