@@ -5,7 +5,6 @@ let attachments = [];
 let isGenerating = false;
 
 function initPlaygroundChat() {
-  console.log("initPlaygroundChat started");
   const runBtn = document.getElementById("run-btn");
   const promptEl = document.getElementById("prompt");
   const clearChatBtn = document.getElementById("clear-chat-btn");
@@ -23,27 +22,7 @@ function initPlaygroundChat() {
   const promptGeneratorUseMessage = document.getElementById("prompt-generator-use-message");
   const promptGeneratorCopy = document.getElementById("prompt-generator-copy");
 
-  // Debug: log all elements
-  console.log("Elements found:", {
-    runBtn: !!runBtn,
-    promptEl: !!promptEl,
-    clearChatBtn: !!clearChatBtn,
-    attachBtn: !!attachBtn,
-    fileInput: !!fileInput,
-    agentSelect: !!agentSelect,
-    systemPromptEl: !!systemPromptEl,
-    improveSystemBtn: !!improveSystemBtn,
-    improvePromptBtn: !!improvePromptBtn,
-  });
-
-  if (!runBtn) {
-    console.error("run-btn not found!");
-    return;
-  }
-  if (!promptEl) {
-    console.error("prompt textarea not found!");
-    return;
-  }
+  if (!runBtn) return;
 
   runBtn.addEventListener("click", sendMessage);
   clearChatBtn.addEventListener("click", clearChat);
@@ -182,14 +161,6 @@ function clearChat() {
 
 function renderChatMessages() {
   const container = document.getElementById("chat-messages");
-  console.log("=== renderChatMessages v4 ===", "history:", chatHistory.length);
-  
-  if (!container) {
-    console.error("chat-messages container not found!");
-    return;
-  }
-  
-  console.log("Container found, innerHTML before:", container.innerHTML.substring(0, 100));
   
   if (chatHistory.length === 0) {
     container.innerHTML = `
@@ -203,7 +174,6 @@ function renderChatMessages() {
   }
   
   container.innerHTML = "";
-  console.log("Cleared container, now adding messages...");
   
   chatHistory.forEach((msg, idx) => {
     const div = document.createElement("div");
@@ -216,13 +186,10 @@ function renderChatMessages() {
     
     const content = document.createElement("div");
     content.className = "message-content";
-    if (msg.streaming) {
-      content.classList.add("message-streaming");
-    }
     
     const text = document.createElement("div");
     text.className = "message-text";
-    text.textContent = msg.content || (msg.streaming ? "" : "");
+    text.textContent = msg.content;
     content.appendChild(text);
     
     // Render attachments for user messages
@@ -252,30 +219,19 @@ function renderChatMessages() {
     div.appendChild(avatar);
     div.appendChild(content);
     container.appendChild(div);
-    console.log("Appended message:", msg.role, msg.content?.substring(0, 50));
   });
   
   // Scroll to bottom
-  console.log("Container scrollHeight:", container.scrollHeight, "clientHeight:", container.clientHeight);
   container.scrollTop = container.scrollHeight;
 }
 
 async function sendMessage() {
-  console.log("sendMessage called");
   const promptEl = document.getElementById("prompt");
   const runBtn = document.getElementById("run-btn");
   const userMessage = promptEl.value.trim();
   
-  console.log("userMessage:", userMessage, "attachments:", attachments.length);
-  
-  if (!userMessage && attachments.length === 0) {
-    console.log("No message or attachments, returning");
-    return;
-  }
-  if (isGenerating) {
-    console.log("Already generating, returning");
-    return;
-  }
+  if (!userMessage && attachments.length === 0) return;
+  if (isGenerating) return;
   
   isGenerating = true;
   runBtn.disabled = true;
@@ -305,7 +261,10 @@ async function sendMessage() {
   chatHistory.push(assistantEntry);
   renderChatMessages();
   
+  // Mark as streaming
   const msgIdx = chatHistory.length - 1;
+  const msgEl = document.getElementById(`message-${msgIdx}`);
+  if (msgEl) msgEl.querySelector(".message-content").classList.add("message-streaming");
   
   try {
     const agentSelect = document.getElementById("agent-select");
@@ -351,18 +310,13 @@ async function sendMessage() {
         .map((a) => a.data);
     }
     
-    console.log("Stream mode:", streamModeEl.checked, "Payload:", payload);
-    
     if (streamModeEl.checked) {
       // Streaming response
-      console.log("Using streaming mode");
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      
-      console.log("Response status:", response.status);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -376,20 +330,16 @@ async function sendMessage() {
       
       while (true) {
         const { done, value } = await reader.read();
-        console.log("Stream chunk:", done, value ? value.length : 0);
         if (done) break;
         
         buffer += decoder.decode(value, { stream: true });
-        console.log("Buffer:", buffer);
         const lines = buffer.split("\n");
         buffer = lines.pop();
         
         for (const line of lines) {
-          console.log("Processing line:", line);
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
-              console.log("Parsed data:", data);
               if (data.content) {
                 fullContent += data.content;
                 chatHistory[msgIdx].content = fullContent;
@@ -405,47 +355,37 @@ async function sendMessage() {
         }
       }
       
-      console.log("Stream complete. fullContent:", fullContent);
       chatHistory[msgIdx].content = fullContent;
       chatHistory[msgIdx].streaming = false;
       chatHistory[msgIdx].meta = meta;
-      console.log("Final chatHistory:", JSON.stringify(chatHistory));
     } else {
       // Non-streaming response
-      console.log("Using non-streaming mode");
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       
-      console.log("Response status:", res.status);
-      
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
       
       const data = await res.json();
-      console.log("Response data:", data);
       chatHistory[msgIdx].content = data.response;
       chatHistory[msgIdx].streaming = false;
       chatHistory[msgIdx].meta = {
         model: data.model_name,
         latency_ms: data.latency_ms,
       };
-      console.log("Updated chatHistory:", JSON.stringify(chatHistory));
     }
   } catch (err) {
-    console.error("sendMessage error:", err);
     chatHistory[msgIdx].content = `Error: ${err.message}`;
     chatHistory[msgIdx].streaming = false;
   }
   
   isGenerating = false;
   runBtn.disabled = false;
-  console.log("About to call final renderChatMessages, chatHistory:", chatHistory.length);
   renderChatMessages();
-  console.log("Final renderChatMessages completed");
 }
 
 // ========== Prompt Generator ==========
@@ -547,10 +487,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initABTesterUI();
   initEvaluationUI();
   initOrchestratorUI();
-  initChatLabUI();
-  initGuardrailsUI();
-  initHistoryUI();
-  initDashboardUI();
 });
 
 
@@ -753,12 +689,8 @@ function initToolsUI() {
 // Prompt Builder logic
 
 
-async function fetchPromptTemplates(includePresets = false, category = null) {
-  let url = "/api/prompt-templates?include_presets=" + includePresets;
-  if (category) {
-    url += "&category=" + encodeURIComponent(category);
-  }
-  const res = await fetch(url);
+async function fetchPromptTemplates() {
+  const res = await fetch("/api/prompt-templates");
   if (!res.ok) {
     throw new Error(`Failed to fetch prompt templates: ${res.status}`);
   }
@@ -766,109 +698,17 @@ async function fetchPromptTemplates(includePresets = false, category = null) {
   return data.templates || [];
 }
 
-async function fetchPresetTemplates(category = null) {
-  return fetchPromptTemplates(true, category);
-}
-
-function renderPresetTemplatesGrid(templates) {
-  const grid = document.getElementById("preset-templates-grid");
-  if (!grid) return;
-  grid.innerHTML = "";
-
-  // Filter out user templates (negative IDs are presets)
-  const presets = templates.filter(t => t.id < 0);
-  
-  if (presets.length === 0) {
-    grid.innerHTML = '<p style="color:#9ca3af;">No preset templates in this category.</p>';
-    return;
-  }
-
-  presets.forEach((tpl) => {
-    const card = document.createElement("div");
-    card.className = "preset-template-card";
-    card.dataset.id = tpl.id;
-    
-    const categoryLabel = getCategoryLabel(tpl.category);
-    const varsHtml = (tpl.variables || []).map(v => `<span>{{${v}}}</span>`).join("");
-    
-    card.innerHTML = `
-      <div class="card-category">${categoryLabel}</div>
-      <div class="card-name">${escapeHtml(tpl.name)}</div>
-      <div class="card-desc">${escapeHtml(tpl.description || "")}</div>
-      ${varsHtml ? `<div class="card-vars">${varsHtml}</div>` : ""}
-    `;
-    
-    card.addEventListener("click", () => loadPresetTemplate(tpl));
-    grid.appendChild(card);
-  });
-}
-
-function getCategoryLabel(category) {
-  const labels = {
-    roleplay: "🎭 Role-Play",
-    cot: "🧠 Chain-of-Thought",
-    fewshot: "📚 Few-Shot",
-    general: "⚙️ General",
-    custom: "📝 Custom"
-  };
-  return labels[category] || category;
-}
-
-function loadPresetTemplate(tpl) {
-  // Populate form with preset values
-  document.getElementById("prompt-template-id").value = ""; // New template based on preset
-  document.getElementById("prompt-template-name").value = tpl.name + " (Copy)";
-  document.getElementById("prompt-template-category").value = tpl.category || "custom";
-  document.getElementById("prompt-template-description").value = tpl.description || "";
-  document.getElementById("prompt-template-system").value = tpl.system_prompt || "";
-  document.getElementById("prompt-template-user").value = tpl.user_prompt || "";
-  document.getElementById("prompt-template-variables").value = (tpl.variables || []).join(", ");
-  
-  // Build sample vars JSON
-  const sampleVars = {};
-  (tpl.variables || []).forEach(v => {
-    sampleVars[v] = `[${v}]`;
-  });
-  document.getElementById("prompt-template-vars-json").value = 
-    Object.keys(sampleVars).length > 0 ? JSON.stringify(sampleVars, null, 2) : "";
-  
-  updatePromptTemplatePreview();
-  
-  // Highlight selected card
-  document.querySelectorAll(".preset-template-card").forEach(c => c.classList.remove("selected"));
-  const selectedCard = document.querySelector(`.preset-template-card[data-id="${tpl.id}"]`);
-  if (selectedCard) selectedCard.classList.add("selected");
-  
-  // Scroll to editor
-  document.querySelector(".prompt-template-editor")?.scrollIntoView({ behavior: "smooth" });
-}
-
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
 
 function renderPromptTemplatesTable(templates) {
   const tbody = document.querySelector("#prompt-templates-table tbody");
   if (!tbody) return;
   tbody.innerHTML = "";
 
-  // Only show user templates (positive IDs)
-  const userTemplates = templates.filter(t => t.id > 0);
-  
-  if (userTemplates.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" style="color:#9ca3af;text-align:center;">No saved templates yet. Create one or load from presets.</td></tr>';
-    return;
-  }
-
-  userTemplates.forEach((tpl) => {
+  templates.forEach((tpl) => {
     const tr = document.createElement("tr");
-    const categoryLabel = getCategoryLabel(tpl.category);
     tr.innerHTML = `
       <td>${tpl.id}</td>
-      <td>${escapeHtml(tpl.name)}</td>
-      <td>${categoryLabel}</td>
+      <td>${tpl.name}</td>
       <td>
         <button type="button" data-action="edit" data-id="${tpl.id}">Edit</button>
         <button type="button" data-action="delete" data-id="${tpl.id}">Delete</button>
@@ -900,13 +740,12 @@ async function onPromptTemplatesTableAction(event) {
 
 
 async function populatePromptTemplateForm(id) {
-  const templates = await fetchPromptTemplates(false); // Only user templates for editing
+  const templates = await fetchPromptTemplates();
   const tpl = templates.find((t) => t.id === id);
   if (!tpl) return;
 
   document.getElementById("prompt-template-id").value = tpl.id;
   document.getElementById("prompt-template-name").value = tpl.name || "";
-  document.getElementById("prompt-template-category").value = tpl.category || "custom";
   document.getElementById("prompt-template-description").value = tpl.description || "";
   document.getElementById("prompt-template-system").value = tpl.system_prompt || "";
   document.getElementById("prompt-template-user").value = tpl.user_prompt || "";
@@ -929,7 +768,6 @@ async function submitPromptTemplateForm(event) {
 
   const id = document.getElementById("prompt-template-id").value;
   const name = document.getElementById("prompt-template-name").value.trim();
-  const category = document.getElementById("prompt-template-category").value;
   const description = document.getElementById("prompt-template-description").value.trim();
   const systemPrompt = document.getElementById("prompt-template-system").value;
   const userPrompt = document.getElementById("prompt-template-user").value;
@@ -941,7 +779,6 @@ async function submitPromptTemplateForm(event) {
 
   const payload = {
     name,
-    category,
     description,
     system_prompt: systemPrompt,
     user_prompt: userPrompt,
@@ -971,7 +808,6 @@ async function submitPromptTemplateForm(event) {
 function resetPromptTemplateForm() {
   document.getElementById("prompt-template-id").value = "";
   document.getElementById("prompt-template-name").value = "";
-  document.getElementById("prompt-template-category").value = "custom";
   document.getElementById("prompt-template-description").value = "";
   document.getElementById("prompt-template-system").value = "";
   document.getElementById("prompt-template-user").value = "";
@@ -979,33 +815,11 @@ function resetPromptTemplateForm() {
   document.getElementById("prompt-template-vars-json").value = "";
   document.getElementById("prompt-template-preview").textContent = "";
   document.getElementById("prompt-template-message").textContent = "";
-  
-  // Clear preset selection
-  document.querySelectorAll(".preset-template-card").forEach(c => c.classList.remove("selected"));
 }
 
 
 async function refreshPromptTemplatesUI() {
-  // Fetch user templates for the table
-  const userTemplates = await fetchPromptTemplates(false);
-  renderPromptTemplatesTable(userTemplates);
-  
-  // Fetch all (including presets) for the preset grid
-  const allTemplates = await fetchPromptTemplates(true);
-  renderPresetTemplatesGrid(allTemplates);
-}
-
-async function filterPresetsByCategory(category) {
-  const templates = category === "all" 
-    ? await fetchPromptTemplates(true) 
-    : await fetchPromptTemplates(true, category);
-  renderPresetTemplatesGrid(templates);
-}
-
-async function filterUserTemplatesByCategory(category) {
-  const templates = category 
-    ? await fetchPromptTemplates(false, category) 
-    : await fetchPromptTemplates(false);
+  const templates = await fetchPromptTemplates();
   renderPromptTemplatesTable(templates);
 }
 
@@ -1068,7 +882,6 @@ function initPromptBuilderUI() {
   const varsJsonEl = document.getElementById("prompt-template-vars-json");
   const userPromptEl = document.getElementById("prompt-template-user");
   const applyBtn = document.getElementById("prompt-template-apply-btn");
-  const categoryFilter = document.getElementById("template-category-filter");
 
   if (!form) return;
 
@@ -1078,22 +891,6 @@ function initPromptBuilderUI() {
   varsJsonEl.addEventListener("input", updatePromptTemplatePreview);
   userPromptEl.addEventListener("input", updatePromptTemplatePreview);
   applyBtn.addEventListener("click", applyPromptTemplateToPlayground);
-  
-  // Category filter for user templates
-  if (categoryFilter) {
-    categoryFilter.addEventListener("change", (e) => {
-      filterUserTemplatesByCategory(e.target.value);
-    });
-  }
-  
-  // Preset category tabs
-  document.querySelectorAll(".preset-cat-btn").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      document.querySelectorAll(".preset-cat-btn").forEach(b => b.classList.remove("active"));
-      e.target.classList.add("active");
-      filterPresetsByCategory(e.target.dataset.category);
-    });
-  });
 
   refreshPromptTemplatesUI().catch((err) => {
     const messageEl = document.getElementById("prompt-template-message");
@@ -2608,1424 +2405,4 @@ function initOrchestratorUI() {
   refreshOrchestratorUI().catch((err) => {
     console.error("Failed to load orchestrator data:", err);
   });
-}
-
-// ========== Chat Lab (Multi-Turn Branching Conversations) ==========
-
-let currentChatTreeId = null;
-let branchFromNodeId = null;
-
-async function fetchChatTrees() {
-  const res = await fetch("/api/chat-lab/trees");
-  if (!res.ok) throw new Error(`Failed to fetch chat trees: ${res.status}`);
-  const data = await res.json();
-  return data.trees || [];
-}
-
-async function fetchChatTree(treeId) {
-  const res = await fetch(`/api/chat-lab/trees/${treeId}`);
-  if (!res.ok) throw new Error(`Failed to fetch chat tree: ${res.status}`);
-  return res.json();
-}
-
-async function fetchChatTreeStructure(treeId) {
-  const res = await fetch(`/api/chat-lab/trees/${treeId}/structure`);
-  if (!res.ok) return null;
-  return res.json();
-}
-
-async function fetchChatHistory(treeId, nodeId = null) {
-  let url = `/api/chat-lab/trees/${treeId}/history`;
-  if (nodeId) url += `?node_id=${encodeURIComponent(nodeId)}`;
-  const res = await fetch(url);
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.messages || [];
-}
-
-function renderChatTreesTable(trees) {
-  const tbody = document.querySelector("#chat-trees-table tbody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-
-  if (trees.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" style="color:#6b7280;text-align:center;">No conversations yet</td></tr>';
-    return;
-  }
-
-  trees.forEach((tree) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${tree.id}</td>
-      <td>${escapeHtml(tree.name)}</td>
-      <td>
-        <button type="button" data-action="load" data-id="${tree.id}">Open</button>
-        <button type="button" data-action="edit" data-id="${tree.id}">Edit</button>
-        <button type="button" data-action="delete" data-id="${tree.id}">✕</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-
-  tbody.querySelectorAll("button").forEach((btn) => {
-    btn.addEventListener("click", onChatTreeAction);
-  });
-}
-
-async function onChatTreeAction(event) {
-  const btn = event.currentTarget;
-  const id = Number(btn.dataset.id);
-  const action = btn.dataset.action;
-
-  if (action === "load") {
-    await loadChatTree(id);
-  } else if (action === "edit") {
-    await populateChatTreeForm(id);
-  } else if (action === "delete") {
-    if (confirm("Delete this conversation and all its messages?")) {
-      await fetch(`/api/chat-lab/trees/${id}`, { method: "DELETE" });
-      if (currentChatTreeId === id) {
-        currentChatTreeId = null;
-        renderChatMessages([]);
-        renderChatTreeVisualization(null);
-      }
-      await refreshChatTreesUI();
-    }
-  }
-}
-
-async function loadChatTree(treeId) {
-  currentChatTreeId = treeId;
-  branchFromNodeId = null;
-  document.getElementById("chat-branch-indicator").style.display = "none";
-  
-  const tree = await fetchChatTree(treeId);
-  const history = await fetchChatHistory(treeId);
-  
-  renderChatMessages(history, tree);
-  
-  // Update tree form to show current settings
-  document.getElementById("chat-tree-id").value = tree.id;
-  document.getElementById("chat-tree-name").value = tree.name || "";
-  document.getElementById("chat-tree-model").value = tree.model_name || "";
-  document.getElementById("chat-tree-system").value = tree.system_prompt || "";
-  document.getElementById("chat-tree-description").value = tree.description || "";
-  
-  // Refresh tree visualization
-  await refreshChatTreeVisualization();
-}
-
-function renderChatMessages(messages, tree = null) {
-  const container = document.getElementById("chat-lab-messages");
-  if (!container) return;
-  
-  if (!messages || messages.length === 0) {
-    container.innerHTML = `
-      <div class="chat-empty-state">
-        ${currentChatTreeId 
-          ? "<p>Start the conversation by sending a message below.</p>"
-          : "<p>Select a conversation or create a new one to start chatting.</p>"}
-      </div>
-    `;
-    return;
-  }
-
-  container.innerHTML = "";
-  
-  messages.forEach((msg, idx) => {
-    const div = document.createElement("div");
-    div.className = `chat-message ${msg.role}`;
-    div.dataset.nodeId = msg.id || `msg-${idx}`;
-    
-    let metaHtml = "";
-    if (msg.metadata) {
-      const parts = [];
-      if (msg.metadata.latency_ms) parts.push(`${msg.metadata.latency_ms.toFixed(0)}ms`);
-      if (msg.metadata.total_tokens) parts.push(`${msg.metadata.total_tokens} tokens`);
-      if (msg.metadata.model) parts.push(msg.metadata.model);
-      if (parts.length > 0) metaHtml = `<div class="chat-message-meta">${parts.join(" • ")}</div>`;
-    }
-    
-    div.innerHTML = `
-      <div class="chat-message-content">${escapeHtml(msg.content)}</div>
-      ${metaHtml}
-      <div class="chat-message-actions">
-        <button type="button" data-action="branch" title="Create branch from here">🌿</button>
-        <button type="button" data-action="copy" title="Copy text">📋</button>
-      </div>
-    `;
-    container.appendChild(div);
-  });
-
-  // Add action handlers
-  container.querySelectorAll(".chat-message-actions button").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const msgDiv = btn.closest(".chat-message");
-      const nodeId = msgDiv.dataset.nodeId;
-      const action = btn.dataset.action;
-      
-      if (action === "branch") {
-        startBranching(nodeId);
-      } else if (action === "copy") {
-        const text = msgDiv.querySelector(".chat-message-content").textContent;
-        navigator.clipboard.writeText(text);
-      }
-    });
-  });
-
-  // Scroll to bottom
-  container.scrollTop = container.scrollHeight;
-}
-
-function startBranching(fromNodeId) {
-  branchFromNodeId = fromNodeId;
-  document.getElementById("chat-branch-indicator").style.display = "flex";
-  document.getElementById("chat-branch-info").textContent = `Branch will be created after message ${fromNodeId}`;
-}
-
-function cancelBranching() {
-  branchFromNodeId = null;
-  document.getElementById("chat-branch-indicator").style.display = "none";
-}
-
-async function sendChatMessage() {
-  if (!currentChatTreeId) {
-    document.getElementById("chat-tree-message").textContent = "Please select or create a conversation first.";
-    return;
-  }
-  
-  const input = document.getElementById("chat-lab-input");
-  const content = input.value.trim();
-  if (!content) return;
-  
-  const sendBtn = document.getElementById("chat-lab-send-btn");
-  sendBtn.disabled = true;
-  sendBtn.textContent = "Sending...";
-  
-  try {
-    const payload = { content };
-    
-    // If branching, include the parent node
-    if (branchFromNodeId) {
-      // First create the branch
-      await fetch(`/api/chat-lab/trees/${currentChatTreeId}/branch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from_node_id: branchFromNodeId })
-      });
-      payload.parent_node_id = branchFromNodeId;
-      cancelBranching();
-    }
-    
-    const res = await fetch(`/api/chat-lab/trees/${currentChatTreeId}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    
-    const data = await res.json();
-    
-    if (data.error) {
-      document.getElementById("chat-tree-message").textContent = `Error: ${data.error}`;
-    } else {
-      input.value = "";
-      // Reload conversation
-      await loadChatTree(currentChatTreeId);
-    }
-  } catch (err) {
-    document.getElementById("chat-tree-message").textContent = `Error: ${err.message}`;
-  } finally {
-    sendBtn.disabled = false;
-    sendBtn.textContent = "Send";
-  }
-}
-
-async function refreshChatTreeVisualization() {
-  if (!currentChatTreeId) {
-    renderChatTreeVisualization(null);
-    return;
-  }
-  
-  const structure = await fetchChatTreeStructure(currentChatTreeId);
-  renderChatTreeVisualization(structure);
-}
-
-function renderChatTreeVisualization(structure) {
-  const container = document.getElementById("chat-tree-visualization");
-  if (!container) return;
-  
-  if (!structure || !structure.id) {
-    container.innerHTML = '<div class="tree-empty-state">No conversation loaded</div>';
-    return;
-  }
-  
-  container.innerHTML = "";
-  
-  function renderNode(node, isRoot = false) {
-    const nodeDiv = document.createElement("div");
-    nodeDiv.className = "tree-node";
-    if (isRoot) nodeDiv.style.marginLeft = "0";
-    
-    const contentDiv = document.createElement("div");
-    contentDiv.className = "tree-node-content" + (node.is_active ? " active" : "");
-    contentDiv.dataset.nodeId = node.id;
-    
-    contentDiv.innerHTML = `
-      <span class="tree-node-role ${node.role}">${node.role.charAt(0).toUpperCase()}</span>
-      <span class="tree-node-preview">${escapeHtml(node.content_preview)}</span>
-      ${node.branch_name ? `<span class="tree-node-branch">${escapeHtml(node.branch_name)}</span>` : ""}
-    `;
-    
-    contentDiv.addEventListener("click", () => switchToNode(node.id));
-    nodeDiv.appendChild(contentDiv);
-    
-    if (node.children && node.children.length > 0) {
-      const childrenDiv = document.createElement("div");
-      childrenDiv.className = "tree-children";
-      node.children.forEach((child) => {
-        childrenDiv.appendChild(renderNode(child, false));
-      });
-      nodeDiv.appendChild(childrenDiv);
-    }
-    
-    return nodeDiv;
-  }
-  
-  container.appendChild(renderNode(structure, true));
-}
-
-async function switchToNode(nodeId) {
-  if (!currentChatTreeId) return;
-  
-  await fetch(`/api/chat-lab/trees/${currentChatTreeId}/switch?to_node_id=${encodeURIComponent(nodeId)}`, {
-    method: "POST"
-  });
-  
-  await loadChatTree(currentChatTreeId);
-}
-
-async function populateChatTreeForm(treeId) {
-  const tree = await fetchChatTree(treeId);
-  document.getElementById("chat-tree-id").value = tree.id;
-  document.getElementById("chat-tree-name").value = tree.name || "";
-  document.getElementById("chat-tree-model").value = tree.model_name || "";
-  document.getElementById("chat-tree-system").value = tree.system_prompt || "";
-  document.getElementById("chat-tree-description").value = tree.description || "";
-}
-
-function resetChatTreeForm() {
-  document.getElementById("chat-tree-id").value = "";
-  document.getElementById("chat-tree-name").value = "";
-  document.getElementById("chat-tree-model").value = "";
-  document.getElementById("chat-tree-system").value = "";
-  document.getElementById("chat-tree-description").value = "";
-  document.getElementById("chat-tree-message").textContent = "";
-}
-
-async function submitChatTreeForm(event) {
-  event.preventDefault();
-  const messageEl = document.getElementById("chat-tree-message");
-  messageEl.textContent = "";
-  
-  const id = document.getElementById("chat-tree-id").value;
-  const name = document.getElementById("chat-tree-name").value.trim();
-  const model_name = document.getElementById("chat-tree-model").value;
-  const system_prompt = document.getElementById("chat-tree-system").value;
-  const description = document.getElementById("chat-tree-description").value;
-  
-  if (!name) {
-    messageEl.textContent = "Name is required";
-    return;
-  }
-  
-  const payload = { name, model_name, system_prompt, description };
-  const isUpdate = !!id;
-  const url = isUpdate ? `/api/chat-lab/trees/${id}` : "/api/chat-lab/trees";
-  const method = isUpdate ? "PUT" : "POST";
-  
-  try {
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    
-    if (!res.ok) {
-      messageEl.textContent = `Save failed: ${res.status}`;
-      return;
-    }
-    
-    const tree = await res.json();
-    messageEl.textContent = "Saved";
-    await refreshChatTreesUI();
-    
-    // If new tree, load it
-    if (!isUpdate) {
-      await loadChatTree(tree.id);
-    }
-  } catch (err) {
-    messageEl.textContent = `Error: ${err.message}`;
-  }
-}
-
-async function refreshChatTreesUI() {
-  const trees = await fetchChatTrees();
-  renderChatTreesTable(trees);
-}
-
-function initChatLabUI() {
-  const form = document.getElementById("chat-tree-form");
-  const newBtn = document.getElementById("chat-tree-new-btn");
-  const resetBtn = document.getElementById("chat-tree-reset-btn");
-  const sendBtn = document.getElementById("chat-lab-send-btn");
-  const refreshTreeBtn = document.getElementById("chat-refresh-tree-btn");
-  const cancelBranchBtn = document.getElementById("chat-cancel-branch-btn");
-  const inputEl = document.getElementById("chat-lab-input");
-  
-  if (!form) return;
-  
-  form.addEventListener("submit", submitChatTreeForm);
-  newBtn.addEventListener("click", resetChatTreeForm);
-  resetBtn.addEventListener("click", resetChatTreeForm);
-  sendBtn.addEventListener("click", sendChatMessage);
-  refreshTreeBtn.addEventListener("click", refreshChatTreeVisualization);
-  cancelBranchBtn.addEventListener("click", cancelBranching);
-  
-  // Shift+Enter sends, Enter adds newline
-  inputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendChatMessage();
-    }
-  });
-  
-  refreshChatTreesUI().catch((err) => {
-    console.error("Failed to load chat trees:", err);
-  });
-}
-
-
-// ========== Guardrail Tester ==========
-
-function initGuardrailsUI() {
-  const newRuleBtn = document.getElementById("guardrail-new-rule-btn");
-  const newTestBtn = document.getElementById("guardrail-new-test-btn");
-  const checkBtn = document.getElementById("guardrail-check-btn");
-  const runAllBtn = document.getElementById("guardrail-run-all-btn");
-  
-  const ruleForm = document.getElementById("guardrail-rule-form");
-  const testForm = document.getElementById("guardrail-test-form");
-  
-  const ruleCancelBtn = document.getElementById("guardrail-rule-cancel");
-  const ruleDeleteBtn = document.getElementById("guardrail-rule-delete");
-  const testCancelBtn = document.getElementById("guardrail-test-cancel");
-  const testDeleteBtn = document.getElementById("guardrail-test-delete");
-  
-  if (!newRuleBtn) return;
-  
-  newRuleBtn.addEventListener("click", () => showRuleEditor(null));
-  newTestBtn.addEventListener("click", () => showTestEditor(null));
-  checkBtn.addEventListener("click", checkGuardrails);
-  runAllBtn.addEventListener("click", runGuardrailTests);
-  
-  ruleForm.addEventListener("submit", saveGuardrailRule);
-  testForm.addEventListener("submit", saveGuardrailTest);
-  
-  ruleCancelBtn.addEventListener("click", hideEditors);
-  ruleDeleteBtn.addEventListener("click", deleteGuardrailRule);
-  testCancelBtn.addEventListener("click", hideEditors);
-  testDeleteBtn.addEventListener("click", deleteGuardrailTest);
-  
-  // Refresh on tab select
-  document.querySelectorAll(".tab-button").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (btn.getAttribute("data-tab") === "guardrails-tab") {
-        refreshGuardrailsUI();
-      }
-    });
-  });
-  
-  refreshGuardrailsUI();
-}
-
-async function refreshGuardrailsUI() {
-  try {
-    const [rulesRes, testsRes] = await Promise.all([
-      fetch("/api/guardrails/rules"),
-      fetch("/api/guardrails/tests")
-    ]);
-    
-    const rulesData = await rulesRes.json();
-    const testsData = await testsRes.json();
-    
-    renderGuardrailRules(rulesData.rules || []);
-    renderGuardrailTests(testsData.tests || []);
-  } catch (err) {
-    console.error("Failed to load guardrails data:", err);
-  }
-}
-
-function renderGuardrailRules(rules) {
-  const tbody = document.querySelector("#guardrails-rules-table tbody");
-  if (!tbody) return;
-  
-  tbody.innerHTML = rules.map(rule => `
-    <tr>
-      <td>
-        <input type="checkbox" ${rule.enabled ? "checked" : ""} 
-               onchange="toggleGuardrailRule(${rule.id})" />
-      </td>
-      <td title="${rule.description}">${rule.name}</td>
-      <td><span class="rule-type-badge ${rule.type}">${rule.type}</span></td>
-      <td>
-        <button onclick="editGuardrailRule(${rule.id})">✏️</button>
-      </td>
-    </tr>
-  `).join("");
-}
-
-function renderGuardrailTests(tests) {
-  const tbody = document.querySelector("#guardrails-tests-table tbody");
-  if (!tbody) return;
-  
-  tbody.innerHTML = tests.map(test => `
-    <tr>
-      <td title="${test.description || test.input_text}">${test.name}</td>
-      <td>${test.expected_blocked ? "🚫 Block" : "✅ Pass"}</td>
-      <td>
-        <button onclick="editGuardrailTest(${test.id})">✏️</button>
-      </td>
-    </tr>
-  `).join("");
-}
-
-function hideEditors() {
-  document.getElementById("guardrail-rule-editor").style.display = "none";
-  document.getElementById("guardrail-test-editor").style.display = "none";
-  document.getElementById("guardrail-editor-placeholder").style.display = "block";
-}
-
-function showRuleEditor(rule) {
-  hideEditors();
-  document.getElementById("guardrail-editor-placeholder").style.display = "none";
-  document.getElementById("guardrail-rule-editor").style.display = "block";
-  
-  const form = document.getElementById("guardrail-rule-form");
-  if (rule) {
-    document.getElementById("guardrail-rule-id").value = rule.id;
-    document.getElementById("guardrail-rule-name").value = rule.name;
-    document.getElementById("guardrail-rule-description").value = rule.description || "";
-    document.getElementById("guardrail-rule-type").value = rule.type;
-    document.getElementById("guardrail-rule-config").value = JSON.stringify(rule.config, null, 2);
-    document.getElementById("guardrail-rule-enabled").checked = rule.enabled;
-    document.getElementById("guardrail-rule-delete").style.display = "inline-block";
-  } else {
-    form.reset();
-    document.getElementById("guardrail-rule-id").value = "";
-    document.getElementById("guardrail-rule-config").value = '{\n  "mode": "warn"\n}';
-    document.getElementById("guardrail-rule-delete").style.display = "none";
-  }
-}
-
-function showTestEditor(test) {
-  hideEditors();
-  document.getElementById("guardrail-editor-placeholder").style.display = "none";
-  document.getElementById("guardrail-test-editor").style.display = "block";
-  
-  const form = document.getElementById("guardrail-test-form");
-  if (test) {
-    document.getElementById("guardrail-test-id").value = test.id;
-    document.getElementById("guardrail-test-name").value = test.name;
-    document.getElementById("guardrail-test-description").value = test.description || "";
-    document.getElementById("guardrail-test-input").value = test.input_text;
-    document.getElementById("guardrail-test-blocked").checked = test.expected_blocked;
-    document.getElementById("guardrail-test-flags").value = (test.expected_flags || []).join(", ");
-    document.getElementById("guardrail-test-tags").value = (test.tags || []).join(", ");
-    document.getElementById("guardrail-test-delete").style.display = "inline-block";
-  } else {
-    form.reset();
-    document.getElementById("guardrail-test-id").value = "";
-    document.getElementById("guardrail-test-delete").style.display = "none";
-  }
-}
-
-async function editGuardrailRule(ruleId) {
-  try {
-    const res = await fetch(`/api/guardrails/rules/${ruleId}`);
-    const rule = await res.json();
-    showRuleEditor(rule);
-  } catch (err) {
-    console.error("Failed to load rule:", err);
-  }
-}
-
-async function editGuardrailTest(testId) {
-  try {
-    const res = await fetch(`/api/guardrails/tests/${testId}`);
-    const test = await res.json();
-    showTestEditor(test);
-  } catch (err) {
-    console.error("Failed to load test:", err);
-  }
-}
-
-async function toggleGuardrailRule(ruleId) {
-  try {
-    await fetch(`/api/guardrails/rules/${ruleId}/toggle`, { method: "POST" });
-    refreshGuardrailsUI();
-  } catch (err) {
-    console.error("Failed to toggle rule:", err);
-  }
-}
-
-async function saveGuardrailRule(e) {
-  e.preventDefault();
-  
-  const ruleId = document.getElementById("guardrail-rule-id").value;
-  let config = {};
-  try {
-    config = JSON.parse(document.getElementById("guardrail-rule-config").value || "{}");
-  } catch (err) {
-    alert("Invalid JSON in configuration");
-    return;
-  }
-  
-  const payload = {
-    name: document.getElementById("guardrail-rule-name").value,
-    description: document.getElementById("guardrail-rule-description").value,
-    type: document.getElementById("guardrail-rule-type").value,
-    config: config,
-    enabled: document.getElementById("guardrail-rule-enabled").checked,
-  };
-  
-  try {
-    const url = ruleId ? `/api/guardrails/rules/${ruleId}` : "/api/guardrails/rules";
-    const method = ruleId ? "PUT" : "POST";
-    
-    await fetch(url, {
-      method: method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    
-    hideEditors();
-    refreshGuardrailsUI();
-  } catch (err) {
-    console.error("Failed to save rule:", err);
-  }
-}
-
-async function deleteGuardrailRule() {
-  const ruleId = document.getElementById("guardrail-rule-id").value;
-  if (!ruleId || !confirm("Delete this rule?")) return;
-  
-  try {
-    await fetch(`/api/guardrails/rules/${ruleId}`, { method: "DELETE" });
-    hideEditors();
-    refreshGuardrailsUI();
-  } catch (err) {
-    console.error("Failed to delete rule:", err);
-  }
-}
-
-async function saveGuardrailTest(e) {
-  e.preventDefault();
-  
-  const testId = document.getElementById("guardrail-test-id").value;
-  const flagsStr = document.getElementById("guardrail-test-flags").value;
-  const tagsStr = document.getElementById("guardrail-test-tags").value;
-  
-  const payload = {
-    name: document.getElementById("guardrail-test-name").value,
-    description: document.getElementById("guardrail-test-description").value,
-    input_text: document.getElementById("guardrail-test-input").value,
-    expected_blocked: document.getElementById("guardrail-test-blocked").checked,
-    expected_flags: flagsStr ? flagsStr.split(",").map(s => s.trim()).filter(Boolean) : [],
-    tags: tagsStr ? tagsStr.split(",").map(s => s.trim()).filter(Boolean) : [],
-  };
-  
-  try {
-    const url = testId ? `/api/guardrails/tests/${testId}` : "/api/guardrails/tests";
-    const method = testId ? "PUT" : "POST";
-    
-    await fetch(url, {
-      method: method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    
-    hideEditors();
-    refreshGuardrailsUI();
-  } catch (err) {
-    console.error("Failed to save test:", err);
-  }
-}
-
-async function deleteGuardrailTest() {
-  const testId = document.getElementById("guardrail-test-id").value;
-  if (!testId || !confirm("Delete this test case?")) return;
-  
-  try {
-    await fetch(`/api/guardrails/tests/${testId}`, { method: "DELETE" });
-    hideEditors();
-    refreshGuardrailsUI();
-  } catch (err) {
-    console.error("Failed to delete test:", err);
-  }
-}
-
-async function checkGuardrails() {
-  const text = document.getElementById("guardrail-check-input").value.trim();
-  if (!text) {
-    alert("Please enter text to check");
-    return;
-  }
-  
-  const resultEl = document.getElementById("guardrail-check-result");
-  const statusEl = document.getElementById("guardrail-check-status");
-  const timeEl = document.getElementById("guardrail-check-time");
-  const flagsEl = document.getElementById("guardrail-check-flags");
-  const passedEl = document.getElementById("guardrail-check-passed");
-  
-  try {
-    const res = await fetch("/api/guardrails/check", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: text })
-    });
-    
-    const result = await res.json();
-    
-    resultEl.style.display = "block";
-    
-    // Status badge
-    if (result.blocked) {
-      statusEl.textContent = "🚫 BLOCKED";
-      statusEl.className = "status-badge blocked";
-    } else if (result.flags && result.flags.length > 0) {
-      statusEl.textContent = "⚠️ FLAGGED";
-      statusEl.className = "status-badge flagged";
-    } else {
-      statusEl.textContent = "✅ PASSED";
-      statusEl.className = "status-badge passed";
-    }
-    
-    timeEl.textContent = `${result.execution_time_ms.toFixed(2)}ms`;
-    
-    // Flags
-    if (result.flags && result.flags.length > 0) {
-      flagsEl.innerHTML = `
-        <h4>Flags Triggered:</h4>
-        ${result.flags.map(f => `
-          <div class="flag-item ${f.severity}">
-            <div>
-              <span class="flag-rule">${f.rule_name}</span>
-              <span class="rule-type-badge ${f.type}">${f.type}</span>
-            </div>
-            <div class="flag-matches">
-              ${f.matches.map(m => JSON.stringify(m)).join(", ")}
-            </div>
-          </div>
-        `).join("")}
-      `;
-    } else {
-      flagsEl.innerHTML = "";
-    }
-    
-    // Passed rules
-    if (result.passed_rules && result.passed_rules.length > 0) {
-      passedEl.innerHTML = `<h4>Passed Rules:</h4> ${result.passed_rules.join(", ")}`;
-    } else {
-      passedEl.innerHTML = "";
-    }
-    
-  } catch (err) {
-    console.error("Failed to check guardrails:", err);
-    resultEl.style.display = "block";
-    statusEl.textContent = "❌ ERROR";
-    statusEl.className = "status-badge blocked";
-    flagsEl.innerHTML = `<div class="flag-item block">${err.message}</div>`;
-  }
-}
-
-async function runGuardrailTests() {
-  const summaryEl = document.getElementById("guardrail-test-summary");
-  const resultsEl = document.getElementById("guardrail-test-results");
-  
-  try {
-    const res = await fetch("/api/guardrails/run-tests", { method: "POST" });
-    const data = await res.json();
-    
-    summaryEl.style.display = "block";
-    
-    document.getElementById("guardrail-test-total").textContent = `Total: ${data.total}`;
-    document.getElementById("guardrail-test-passed").textContent = `Passed: ${data.passed}`;
-    document.getElementById("guardrail-test-failed").textContent = `Failed: ${data.failed}`;
-    document.getElementById("guardrail-test-rate").textContent = `Rate: ${data.pass_rate.toFixed(1)}%`;
-    
-    resultsEl.innerHTML = data.results.map(r => `
-      <div class="test-result-item ${r.passed ? "passed" : "failed"}">
-        <span class="test-result-icon">${r.passed ? "✅" : "❌"}</span>
-        <span class="test-result-name">${r.test_name}</span>
-        <span class="test-result-details">
-          ${r.passed ? "" : (r.block_match ? "" : "Block mismatch. ") + (r.flags_match ? "" : "Flags mismatch.")}
-        </span>
-      </div>
-    `).join("");
-    
-  } catch (err) {
-    console.error("Failed to run tests:", err);
-    resultsEl.innerHTML = `<div class="test-result-item failed">Error: ${err.message}</div>`;
-  }
-}
-
-// ========== History & Replay ==========
-
-let historyPage = 0;
-const historyPageSize = 20;
-let selectedHistoryEntryId = null;
-
-async function fetchHistory(filters = {}) {
-  let url = `/api/history?limit=${historyPageSize}&offset=${historyPage * historyPageSize}`;
-  
-  if (filters.endpoint) url += `&endpoint=${encodeURIComponent(filters.endpoint)}`;
-  if (filters.model) url += `&model=${encodeURIComponent(filters.model)}`;
-  if (filters.success !== undefined && filters.success !== "") url += `&success=${filters.success}`;
-  if (filters.starred !== undefined && filters.starred !== "") url += `&starred=${filters.starred}`;
-  if (filters.search) url += `&search=${encodeURIComponent(filters.search)}`;
-  
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch history: ${res.status}`);
-  const data = await res.json();
-  return data.entries || [];
-}
-
-async function fetchHistoryStats() {
-  const res = await fetch("/api/history/stats");
-  if (!res.ok) return null;
-  return res.json();
-}
-
-async function fetchHistoryEndpoints() {
-  const res = await fetch("/api/history/endpoints");
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.endpoints || [];
-}
-
-async function fetchHistoryModels() {
-  const res = await fetch("/api/history/models");
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.models || [];
-}
-
-function formatTimestamp(ts) {
-  const d = new Date(ts * 1000);
-  return d.toLocaleString();
-}
-
-function formatTimeAgo(ts) {
-  const now = Date.now() / 1000;
-  const diff = now - ts;
-  
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
-
-function getEndpointIcon(endpoint) {
-  const icons = {
-    generate: "✏️",
-    chat: "💬",
-    ab_test: "⚖️",
-    chat_lab: "🔬",
-    workflow: "🔄",
-    bulk: "📦",
-    replay: "🔁"
-  };
-  return icons[endpoint] || "📝";
-}
-
-function renderHistoryStats(stats) {
-  if (!stats) return;
-  
-  document.getElementById("history-stat-total").textContent = stats.total_entries || 0;
-  document.getElementById("history-stat-success").textContent = 
-    `${(stats.success_rate || 0).toFixed(1)}%`;
-  document.getElementById("history-stat-latency").textContent = 
-    `${(stats.avg_latency_ms || 0).toFixed(0)}ms`;
-  document.getElementById("history-stat-tokens").textContent = 
-    (stats.total_tokens || 0).toLocaleString();
-  document.getElementById("history-stat-starred").textContent = stats.starred_count || 0;
-}
-
-async function populateHistoryFilters() {
-  const endpoints = await fetchHistoryEndpoints();
-  const models = await fetchHistoryModels();
-  
-  const endpointSelect = document.getElementById("history-filter-endpoint");
-  const modelSelect = document.getElementById("history-filter-model");
-  
-  // Clear existing options except first
-  while (endpointSelect.options.length > 1) endpointSelect.remove(1);
-  while (modelSelect.options.length > 1) modelSelect.remove(1);
-  
-  endpoints.forEach(e => {
-    const opt = document.createElement("option");
-    opt.value = e;
-    opt.textContent = e;
-    endpointSelect.appendChild(opt);
-  });
-  
-  models.forEach(m => {
-    const opt = document.createElement("option");
-    opt.value = m;
-    opt.textContent = m;
-    modelSelect.appendChild(opt);
-  });
-}
-
-function getHistoryFilters() {
-  return {
-    endpoint: document.getElementById("history-filter-endpoint").value,
-    model: document.getElementById("history-filter-model").value,
-    success: document.getElementById("history-filter-success").value,
-    starred: document.getElementById("history-filter-starred").value,
-    search: document.getElementById("history-filter-search").value.trim()
-  };
-}
-
-function renderHistoryList(entries) {
-  const container = document.getElementById("history-list");
-  if (!container) return;
-  
-  if (!entries || entries.length === 0) {
-    container.innerHTML = '<div class="history-empty-state"><p>No history entries found.</p></div>';
-    return;
-  }
-  
-  container.innerHTML = "";
-  
-  entries.forEach(entry => {
-    const div = document.createElement("div");
-    div.className = "history-entry";
-    if (entry.starred) div.classList.add("starred");
-    if (!entry.success) div.classList.add("error");
-    if (entry.id === selectedHistoryEntryId) div.classList.add("selected");
-    div.dataset.id = entry.id;
-    
-    const preview = entry.prompt || 
-      (entry.messages && entry.messages.length > 0 ? entry.messages[entry.messages.length - 1].content : "") ||
-      "(no content)";
-    
-    div.innerHTML = `
-      <div class="history-entry-icon">${getEndpointIcon(entry.endpoint)}</div>
-      <div class="history-entry-content">
-        <div class="history-entry-header">
-          <span class="history-entry-endpoint">${entry.endpoint}</span>
-          <span class="history-entry-time">${formatTimeAgo(entry.timestamp)}</span>
-        </div>
-        <div class="history-entry-preview">${escapeHtml(preview.substring(0, 100))}</div>
-        <div class="history-entry-meta">
-          <span>${entry.model || "unknown"}</span>
-          <span>${entry.latency_ms ? entry.latency_ms.toFixed(0) + "ms" : ""}</span>
-          <span>${entry.total_tokens ? entry.total_tokens + " tokens" : ""}</span>
-          ${entry.starred ? "<span>⭐</span>" : ""}
-        </div>
-      </div>
-    `;
-    
-    div.addEventListener("click", () => selectHistoryEntry(entry.id));
-    container.appendChild(div);
-  });
-}
-
-async function selectHistoryEntry(entryId) {
-  selectedHistoryEntryId = entryId;
-  
-  // Update UI selection
-  document.querySelectorAll(".history-entry").forEach(el => {
-    el.classList.toggle("selected", Number(el.dataset.id) === entryId);
-  });
-  
-  // Fetch full entry details
-  const res = await fetch(`/api/history/${entryId}`);
-  if (!res.ok) return;
-  const entry = await res.json();
-  
-  renderHistoryDetail(entry);
-}
-
-function renderHistoryDetail(entry) {
-  const container = document.getElementById("history-detail");
-  if (!container) return;
-  
-  const promptContent = entry.prompt || 
-    (entry.messages ? JSON.stringify(entry.messages, null, 2) : "(no prompt)");
-  
-  container.innerHTML = `
-    <div class="history-detail-section">
-      <h4>Request</h4>
-      <div class="history-detail-meta">
-        <span>Endpoint:</span><strong>${entry.endpoint}</strong>
-        <span>Model:</span><strong>${entry.model || "unknown"}</strong>
-        <span>Time:</span><strong>${formatTimestamp(entry.timestamp)}</strong>
-        <span>Status:</span><strong>${entry.success ? "✅ Success" : "❌ Error"}</strong>
-      </div>
-    </div>
-    
-    ${entry.system_prompt ? `
-    <div class="history-detail-section">
-      <h4>System Prompt</h4>
-      <pre>${escapeHtml(entry.system_prompt)}</pre>
-    </div>
-    ` : ""}
-    
-    <div class="history-detail-section">
-      <h4>Prompt</h4>
-      <pre>${escapeHtml(promptContent)}</pre>
-    </div>
-    
-    <div class="history-detail-section">
-      <h4>Response</h4>
-      <pre>${entry.error ? `Error: ${escapeHtml(entry.error)}` : escapeHtml(entry.response || "(no response)")}</pre>
-    </div>
-    
-    <div class="history-detail-section">
-      <h4>Metrics</h4>
-      <div class="history-detail-meta">
-        <span>Latency:</span><strong>${entry.latency_ms ? entry.latency_ms.toFixed(1) + "ms" : "N/A"}</strong>
-        <span>Prompt Tokens:</span><strong>${entry.prompt_tokens || "N/A"}</strong>
-        <span>Completion Tokens:</span><strong>${entry.completion_tokens || "N/A"}</strong>
-        <span>Total Tokens:</span><strong>${entry.total_tokens || "N/A"}</strong>
-      </div>
-    </div>
-    
-    <div class="history-detail-section">
-      <h4>Notes</h4>
-      <div class="history-notes-form">
-        <textarea id="history-entry-notes" placeholder="Add notes...">${entry.notes || ""}</textarea>
-        <button type="button" id="save-history-notes-btn">Save Notes</button>
-      </div>
-    </div>
-    
-    <div class="history-detail-actions">
-      <button type="button" class="primary" id="replay-entry-btn">🔁 Replay</button>
-      <button type="button" class="secondary" id="star-entry-btn">${entry.starred ? "⭐ Unstar" : "☆ Star"}</button>
-      <button type="button" class="secondary" id="delete-entry-btn">🗑️ Delete</button>
-    </div>
-  `;
-  
-  // Add event handlers
-  document.getElementById("save-history-notes-btn").addEventListener("click", () => {
-    saveHistoryNotes(entry.id);
-  });
-  
-  document.getElementById("replay-entry-btn").addEventListener("click", () => {
-    replayHistoryEntry(entry.id);
-  });
-  
-  document.getElementById("star-entry-btn").addEventListener("click", () => {
-    toggleHistoryStar(entry.id, !entry.starred);
-  });
-  
-  document.getElementById("delete-entry-btn").addEventListener("click", () => {
-    deleteHistoryEntry(entry.id);
-  });
-}
-
-async function saveHistoryNotes(entryId) {
-  const notes = document.getElementById("history-entry-notes").value;
-  
-  await fetch(`/api/history/${entryId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ notes })
-  });
-}
-
-async function toggleHistoryStar(entryId, starred) {
-  await fetch(`/api/history/${entryId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ starred })
-  });
-  
-  await refreshHistoryUI();
-  selectHistoryEntry(entryId);
-}
-
-async function deleteHistoryEntry(entryId) {
-  if (!confirm("Delete this history entry?")) return;
-  
-  await fetch(`/api/history/${entryId}`, { method: "DELETE" });
-  
-  selectedHistoryEntryId = null;
-  document.getElementById("history-detail").innerHTML = 
-    '<p class="history-empty-state">Select an entry to view details</p>';
-  
-  await refreshHistoryUI();
-}
-
-async function replayHistoryEntry(entryId) {
-  const replayBtn = document.getElementById("replay-entry-btn");
-  replayBtn.disabled = true;
-  replayBtn.textContent = "Replaying...";
-  
-  try {
-    const res = await fetch("/api/history/replay", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entry_id: entryId })
-    });
-    
-    const result = await res.json();
-    
-    if (result.error) {
-      alert(`Replay failed: ${result.error}`);
-    } else {
-      // Show comparison
-      alert(`Replay successful!\n\nLatency: ${result.latency_ms.toFixed(0)}ms\n\nOriginal response:\n${result.original_response?.substring(0, 200)}...\n\nNew response:\n${result.response?.substring(0, 200)}...`);
-      await refreshHistoryUI();
-    }
-  } catch (err) {
-    alert(`Replay error: ${err.message}`);
-  } finally {
-    replayBtn.disabled = false;
-    replayBtn.textContent = "🔁 Replay";
-  }
-}
-
-async function clearHistoryData() {
-  if (!confirm("Clear all history entries? Starred entries will be kept.")) return;
-  
-  await fetch("/api/history/clear?keep_starred=true", { method: "POST" });
-  await refreshHistoryUI();
-}
-
-function updateHistoryPagination(entries) {
-  const prevBtn = document.getElementById("history-prev-btn");
-  const nextBtn = document.getElementById("history-next-btn");
-  const pageInfo = document.getElementById("history-page-info");
-  
-  prevBtn.disabled = historyPage === 0;
-  nextBtn.disabled = entries.length < historyPageSize;
-  pageInfo.textContent = `Page ${historyPage + 1}`;
-}
-
-async function refreshHistoryUI() {
-  const stats = await fetchHistoryStats();
-  renderHistoryStats(stats);
-  
-  await populateHistoryFilters();
-  
-  const filters = getHistoryFilters();
-  const entries = await fetchHistory(filters);
-  renderHistoryList(entries);
-  updateHistoryPagination(entries);
-}
-
-function initHistoryUI() {
-  const applyBtn = document.getElementById("history-apply-filter-btn");
-  const clearFilterBtn = document.getElementById("history-clear-filter-btn");
-  const refreshBtn = document.getElementById("history-refresh-btn");
-  const clearBtn = document.getElementById("history-clear-btn");
-  const prevBtn = document.getElementById("history-prev-btn");
-  const nextBtn = document.getElementById("history-next-btn");
-  
-  if (!applyBtn) return;
-  
-  applyBtn.addEventListener("click", () => {
-    historyPage = 0;
-    refreshHistoryUI();
-  });
-  
-  clearFilterBtn.addEventListener("click", () => {
-    document.getElementById("history-filter-endpoint").value = "";
-    document.getElementById("history-filter-model").value = "";
-    document.getElementById("history-filter-success").value = "";
-    document.getElementById("history-filter-starred").value = "";
-    document.getElementById("history-filter-search").value = "";
-    historyPage = 0;
-    refreshHistoryUI();
-  });
-  
-  refreshBtn.addEventListener("click", refreshHistoryUI);
-  clearBtn.addEventListener("click", clearHistoryData);
-  
-  prevBtn.addEventListener("click", () => {
-    if (historyPage > 0) {
-      historyPage--;
-      refreshHistoryUI();
-    }
-  });
-  
-  nextBtn.addEventListener("click", () => {
-    historyPage++;
-    refreshHistoryUI();
-  });
-  
-  // Refresh when tab is selected
-  document.querySelectorAll(".tab-button").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (btn.getAttribute("data-tab") === "history-tab") {
-        refreshHistoryUI();
-      }
-    });
-  });
-}
-
-
-// ========== Latency Dashboard ==========
-
-let dashboardRefreshInterval = null;
-
-function initDashboardUI() {
-  const hoursSelect = document.getElementById("dashboard-hours");
-  const refreshBtn = document.getElementById("dashboard-refresh-btn");
-  const clearBtn = document.getElementById("dashboard-clear-btn");
-  
-  if (!hoursSelect) return;
-  
-  hoursSelect.addEventListener("change", () => refreshDashboard());
-  refreshBtn.addEventListener("click", () => refreshDashboard());
-  clearBtn.addEventListener("click", clearAllMetrics);
-  
-  // Refresh when tab is selected
-  document.querySelectorAll(".tab-button").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (btn.getAttribute("data-tab") === "dashboard-tab") {
-        refreshDashboard();
-      }
-    });
-  });
-}
-
-async function refreshDashboard() {
-  const hours = parseInt(document.getElementById("dashboard-hours").value, 10) || 24;
-  
-  try {
-    const [summaryRes, modelsRes, endpointsRes, hourlyRes, recentRes] = await Promise.all([
-      fetch(`/api/metrics/summary?hours=${hours}`),
-      fetch(`/api/metrics/by-model?hours=${hours}`),
-      fetch(`/api/metrics/by-endpoint?hours=${hours}`),
-      fetch(`/api/metrics/hourly?hours=${hours}`),
-      fetch(`/api/metrics/list?limit=50`)
-    ]);
-    
-    const summary = await summaryRes.json();
-    const modelsData = await modelsRes.json();
-    const endpointsData = await endpointsRes.json();
-    const hourlyData = await hourlyRes.json();
-    const recentData = await recentRes.json();
-    
-    renderDashboardSummary(summary);
-    renderModelMetrics(modelsData.models || []);
-    renderEndpointMetrics(endpointsData.endpoints || []);
-    renderHourlyChart(hourlyData.hourly || []);
-    renderRecentRequests(recentData.metrics || []);
-    
-  } catch (err) {
-    console.error("Failed to load dashboard data:", err);
-  }
-}
-
-function renderDashboardSummary(summary) {
-  document.getElementById("stat-total-requests").textContent = formatNumber(summary.total_requests);
-  
-  const successRate = summary.total_requests > 0 
-    ? ((summary.successful_requests / summary.total_requests) * 100).toFixed(1) 
-    : 0;
-  document.getElementById("stat-success-rate").textContent = `${successRate}%`;
-  
-  document.getElementById("stat-avg-latency").textContent = formatLatency(summary.avg_latency_ms);
-  document.getElementById("stat-p95-latency").textContent = formatLatency(summary.p95_latency_ms);
-  document.getElementById("stat-p99-latency").textContent = formatLatency(summary.p99_latency_ms);
-  document.getElementById("stat-total-tokens").textContent = formatNumber(summary.total_tokens);
-  document.getElementById("stat-tokens-per-sec").textContent = formatNumber(summary.tokens_per_second?.toFixed(1) || 0);
-  document.getElementById("stat-requests-per-min").textContent = formatNumber(summary.requests_per_minute?.toFixed(1) || 0);
-}
-
-function renderModelMetrics(models) {
-  const tbody = document.querySelector("#model-metrics-table tbody");
-  if (!tbody) return;
-  
-  if (models.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="dashboard-empty">No data available</td></tr>`;
-    return;
-  }
-  
-  tbody.innerHTML = models.map(model => `
-    <tr>
-      <td title="${model.model_name}">${truncateText(model.model_name, 30)}</td>
-      <td>${formatNumber(model.request_count)}</td>
-      <td class="${getLatencyClass(model.avg_latency_ms)}">${formatLatency(model.avg_latency_ms)}</td>
-      <td>${formatNumber(model.total_tokens)}</td>
-      <td>
-        <div class="success-rate-bar">
-          <div class="rate-bar">
-            <div class="rate-bar-fill" style="width: ${(model.success_rate * 100).toFixed(0)}%"></div>
-          </div>
-          <span class="rate-value">${(model.success_rate * 100).toFixed(0)}%</span>
-        </div>
-      </td>
-    </tr>
-  `).join("");
-}
-
-function renderEndpointMetrics(endpoints) {
-  const tbody = document.querySelector("#endpoint-metrics-table tbody");
-  if (!tbody) return;
-  
-  if (endpoints.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="dashboard-empty">No data available</td></tr>`;
-    return;
-  }
-  
-  tbody.innerHTML = endpoints.map(ep => `
-    <tr>
-      <td>${ep.endpoint}</td>
-      <td>${formatNumber(ep.request_count)}</td>
-      <td class="${getLatencyClass(ep.avg_latency_ms)}">${formatLatency(ep.avg_latency_ms)}</td>
-      <td>
-        <div class="success-rate-bar">
-          <div class="rate-bar">
-            <div class="rate-bar-fill" style="width: ${(ep.success_rate * 100).toFixed(0)}%"></div>
-          </div>
-          <span class="rate-value">${(ep.success_rate * 100).toFixed(0)}%</span>
-        </div>
-      </td>
-    </tr>
-  `).join("");
-}
-
-function renderHourlyChart(hourlyData) {
-  const container = document.getElementById("hourly-chart-container");
-  if (!container) return;
-  
-  if (hourlyData.length === 0) {
-    container.innerHTML = `
-      <div class="dashboard-empty">
-        <div class="dashboard-empty-icon">📊</div>
-        <p>No hourly data available</p>
-      </div>
-    `;
-    return;
-  }
-  
-  // Simple bar chart (no external library needed)
-  const maxRequests = Math.max(...hourlyData.map(h => h.request_count), 1);
-  
-  const bars = hourlyData.map(h => {
-    const height = (h.request_count / maxRequests) * 100;
-    const hour = h.hour.split("T")[1] || h.hour.slice(-2);
-    return `
-      <div class="chart-bar" style="height: ${height}%">
-        <div class="chart-bar-tooltip">
-          ${hour}:00<br>
-          ${h.request_count} requests<br>
-          ${formatLatency(h.avg_latency_ms)} avg
-        </div>
-      </div>
-    `;
-  }).join("");
-  
-  // X-axis labels (show first, middle, last hours)
-  const firstHour = hourlyData[0]?.hour?.split("T")[1] || "";
-  const lastHour = hourlyData[hourlyData.length - 1]?.hour?.split("T")[1] || "";
-  
-  container.innerHTML = `
-    <div class="chart-bars">${bars}</div>
-    <div class="chart-x-labels">
-      <span>${firstHour}:00</span>
-      <span>Time (hourly)</span>
-      <span>${lastHour}:00</span>
-    </div>
-  `;
-}
-
-function renderRecentRequests(metrics) {
-  const tbody = document.querySelector("#recent-requests-table tbody");
-  if (!tbody) return;
-  
-  if (metrics.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="dashboard-empty">No recent requests</td></tr>`;
-    return;
-  }
-  
-  tbody.innerHTML = metrics.map(m => {
-    const timeAgo = formatTimeAgo(m.timestamp);
-    const statusBadge = m.success 
-      ? `<span class="status-badge success">✓ OK</span>`
-      : `<span class="status-badge error">✗ Error</span>`;
-    
-    return `
-      <tr>
-        <td class="time-ago" title="${m.timestamp}">${timeAgo}</td>
-        <td>${m.endpoint}</td>
-        <td title="${m.model_name}">${truncateText(m.model_name, 20)}</td>
-        <td class="${getLatencyClass(m.latency_ms)}">${formatLatency(m.latency_ms)}</td>
-        <td>${formatNumber(m.total_tokens)}</td>
-        <td>${statusBadge}</td>
-      </tr>
-    `;
-  }).join("");
-}
-
-async function clearAllMetrics() {
-  if (!confirm("Clear all metrics data? This cannot be undone.")) return;
-  
-  try {
-    const res = await fetch("/api/metrics", { method: "DELETE" });
-    if (res.ok) {
-      refreshDashboard();
-    }
-  } catch (err) {
-    console.error("Failed to clear metrics:", err);
-  }
-}
-
-// Helper functions
-function formatNumber(n) {
-  if (n === undefined || n === null) return "0";
-  const num = parseFloat(n);
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
-  if (num >= 1000) return (num / 1000).toFixed(1) + "K";
-  return num.toLocaleString();
-}
-
-function formatLatency(ms) {
-  if (ms === undefined || ms === null) return "0ms";
-  if (ms >= 1000) return (ms / 1000).toFixed(2) + "s";
-  return Math.round(ms) + "ms";
-}
-
-function getLatencyClass(ms) {
-  if (ms < 500) return "latency-fast";
-  if (ms < 2000) return "latency-medium";
-  return "latency-slow";
-}
-
-function truncateText(text, maxLen) {
-  if (!text) return "";
-  return text.length > maxLen ? text.slice(0, maxLen) + "…" : text;
-}
-
-function formatTimeAgo(isoString) {
-  if (!isoString) return "–";
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now - date;
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHr = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHr / 24);
-  
-  if (diffSec < 60) return `${diffSec}s ago`;
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHr < 24) return `${diffHr}h ago`;
-  return `${diffDay}d ago`;
 }

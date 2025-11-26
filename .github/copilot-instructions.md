@@ -3,21 +3,30 @@
 ## Architecture Overview
 
 - **Backend**: FastAPI with modular routers in `app/routers/`
-- **Core Service**: `LocalLLMService` in `app/models/service.py`
-- **Frontend**: Static files in `app/static/` (`index.html`, `main.js`, `style.css`)
-- **Persistence**: JSON files in `app/data/` (auto-created)
+- **Core Service**: `LocalLLMService` in `app/models/service.py` (singleton orchestrator)
+- **Frontend**: Single-page app in `app/static/` (vanilla JS, no framework)
+- **Persistence**: JSON files in `app/data/` (auto-created, BaseStore pattern)
 - **LLM Runtime**: LM Studio at `http://127.0.0.1:1234/v1` (OpenAI-compatible API)
-- **Configuration**: Centralized in `app/config.py`
+- **Configuration**: Centralized in `app/config.py` (env-aware, Path objects)
 - **Documentation**: Comprehensive guides in `docs/` folder
 - **Debugging**: Step-by-step guide available at `docs/debugging-guide.md`
+
+### Key Architectural Decisions
+
+1. **No Database**: All persistence via JSON for simplicity, portability, and git-friendliness
+2. **Single Service Instance**: `LocalLLMService` is shared globally across routers (initialized in `main.py`)
+3. **BaseStore Pattern**: All stores extend `BaseStore[T]` for automatic CRUD with auto-incrementing IDs
+4. **Streaming First**: Use SSE (`StreamingResponse` + `EventSource`) for all LLM calls and bulk operations
+5. **No Auth**: Development-focused tool, assumes trusted local environment
 
 ## Project Structure
 
 ```
 app/
 ├── main.py              # FastAPI app setup & router registration
-├── config.py            # Centralized settings (URLs, defaults, paths)
+├── config.py            # Centralized settings (URLs, defaults, paths as Path objects)
 ├── routers/             # API routers by feature domain
+│   ├── __init__.py      # Exports get_service() helper for accessing singleton
 │   ├── playground.py    # /api/models, /api/generate, /api/chat
 │   ├── tools.py         # /api/tools/*
 │   ├── templates.py     # /api/prompt-templates/*
@@ -29,14 +38,24 @@ app/
 │   ├── history.py       # /api/history/*
 │   └── metrics.py       # /api/metrics/*
 ├── schemas/             # Pydantic models
-│   ├── requests.py      # All request models
+│   ├── requests.py      # All request models (organized by domain with comments)
 │   └── responses.py     # All response models
 ├── models/              # Data stores & business logic
-│   ├── service.py       # LocalLLMService (main orchestration)
-│   ├── base_store.py    # Generic CRUD base class
-│   └── *_store.py       # Feature-specific stores
-└── static/              # Frontend assets
+│   ├── service.py       # LocalLLMService (main orchestration, ~1800 lines)
+│   ├── base_store.py    # Generic CRUD base class with auto-ID management
+│   ├── evaluators.py    # Built-in evaluator functions (f1, BLEU, similarity)
+│   └── *_store.py       # Feature-specific stores extending BaseStore[T]
+└── static/              # Frontend assets (no build step, vanilla JS)
+    ├── index.html       # All 10 tabs in one file
+    ├── main.js          # ~4000 lines, organized by tab with init functions
+    └── style.css        # Dark theme (#0f172a, #1e293b, #374151)
 ```
+
+**Critical files for understanding the system:**
+- `app/routers/__init__.py` - Service singleton access pattern
+- `app/models/base_store.py` - Store inheritance pattern (MUST extend for new stores)
+- `app/models/service.py` - All LLM interaction logic and workflow orchestration
+- `app/schemas/requests.py` - Single source of truth for all API contracts
 
 ## Current Tabs & Features
 
@@ -99,26 +118,74 @@ All tabs fully documented in `docs/` folder:
 
 ### Adding a New API Feature
 1. Create router in `app/routers/new_feature.py`
-2. Add request models to `app/schemas/requests.py`
-3. Create store in `app/models/new_feature_store.py` (extend `BaseStore` if CRUD)
+2. Add request models to `app/schemas/requests.py` (group with comment header)
+3. Create store in `app/models/new_feature_store.py` extending `BaseStore[T]`:
+   ```python
+   class NewFeatureStore(BaseStore[NewFeatureModel]):
+       model_class = NewFeatureModel
+       file_path = config.NEW_FEATURE_FILE  # Add to config.py
+       json_key = "items"  # Optional, default is "items"
+   ```
 4. Add methods to `LocalLLMService` in `app/models/service.py`
-5. Register router in `app/main.py`
+5. Register router in `app/main.py` via `app.include_router(new_feature_router)`
+6. Initialize store in `LocalLLMService.__init__()` if needed
 
 ### Adding a New UI Tab
-1. Add nav link in `index.html`
-2. Create `<section id="new-tab">` panel
-3. Add `initNewUI()` function in `main.js`
-4. Call from `DOMContentLoaded`
+1. Add nav link in `index.html` (follow existing `<li class="tab">` pattern)
+2. Create `<section id="new-tab" class="tab-panel">` with matching ID
+3. Add `initNewTabUI()` function in `main.js` (keep organized by tab)
+4. Call `initNewTabUI()` from `DOMContentLoaded` event listener
+5. Use `showTab('new-tab')` for navigation, respects existing tab system
+
+### Creating a New Store
+**ALWAYS extend `BaseStore[T]` for automatic ID management and CRUD:**
+```python
+from app.models.base_store import BaseStore
+from pydantic import BaseModel
+
+class MyModel(BaseModel):
+    id: int = 0  # Auto-assigned by BaseStore
+    name: str
+    created_at: str = ""  # Auto-populated if present
+
+class MyStore(BaseStore[MyModel]):
+    model_class = MyModel
+    file_path = Path("app/data/my_data.json")
+    # json_key = "items"  # Optional override
+```
+**Never manually manage IDs** - `BaseStore` handles auto-increment via `_next_id`
 
 ## Patterns to Follow
 
-- **Routers**: Use `APIRouter` with prefix and tags
-- **Persistence**: JSON in `app/data/*.json` via store classes
-- **Models**: Pydantic for all request/response validation
-- **Async**: Use `async def` for LLM-calling endpoints
-- **CRUD**: Follow `list_*`, `get_*`, `create_*`, `update_*`, `delete_*` pattern
-- **Streaming**: SSE via `StreamingResponse` + `EventSource`
-- **Styling**: Dark theme (`#0f172a`, `#1e293b`, `#374151`)
+### Backend Patterns
+- **Routers**: Use `APIRouter` with prefix and tags, access service via `from app.routers import get_service`
+- **Service Access**: NEVER create `LocalLLMService()` in routers - use `get_service()` singleton helper
+- **Persistence**: All data in JSON via `BaseStore[T]` - stores auto-save on create/update/delete
+- **Models**: Pydantic for all request/response validation, organized in `schemas/`
+- **Async**: Use `async def` for ALL LLM-calling endpoints (httpx is async)
+- **CRUD Naming**: Follow `list_*`, `get_*`, `create_*`, `update_*`, `delete_*` pattern consistently
+- **Streaming**: SSE via `StreamingResponse` with `text/event-stream` + `EventSource` on frontend
+  ```python
+  async def generate_stream():
+      async for event in service.some_stream():
+          yield f"data: {json.dumps(event)}\n\n"
+  return StreamingResponse(generate_stream(), media_type="text/event-stream")
+  ```
+
+### Frontend Patterns
+- **No Build Step**: Pure vanilla JS, no npm/webpack - keep it simple
+- **Tab System**: Use `showTab(tabId)` for navigation, tabs registered in `index.html` nav
+- **Streaming**: `EventSource` for SSE, handle `message`, `error`, `close` events
+  ```javascript
+  const eventSource = new EventSource('/api/endpoint');
+  eventSource.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      // Handle streaming data
+  };
+  ```
+- **Styling**: Maintain dark theme consistency - bg: `#0f172a`, cards: `#1e293b`, borders: `#374151`
+- **Forms**: Use `FormData` or manual JSON construction, `fetch()` for API calls
+- **Error Handling**: Always show user-friendly errors via `alert()` or status divs
 
 ## Commands
 
@@ -193,6 +260,7 @@ Comprehensive documentation available in `docs/`:
 - **API failures**: Test with `Invoke-WebRequest`
 - **UI not updating**: Check browser console and Network tab
 - **Data not persisting**: Verify file permissions and disk space
+- **Store ID conflicts**: If `next_id` gets out of sync, check JSON file's `next_id` field
 
 **Debugging Commands:**
 ```powershell
@@ -207,9 +275,28 @@ Get-Content "app/data/datasets.json" | ConvertFrom-Json
 
 # Check port usage
 netstat -ano | findstr :8000
+
+# Test LM Studio connection
+Invoke-WebRequest -Uri "http://localhost:1234/v1/models" -Method GET
 ```
 
 Refer to `docs/debugging-guide.md` for detailed troubleshooting steps per tab.
+
+## Dependencies & Environment
+
+**Minimal dependencies** (see `requirements.txt`):
+- `fastapi` - Web framework
+- `uvicorn[standard]` - ASGI server with auto-reload
+- `jinja2` - Template rendering (only for serving `index.html`)
+- `httpx` - Async HTTP client for LM Studio API calls
+
+**No additional libraries** - intentionally kept minimal for:
+- Easy installation and portability
+- Fast startup and reload
+- No version conflicts or dependency hell
+- Git-friendly without large node_modules or build artifacts
+
+**Python Version**: 3.9+ required (for type hints and async features)
 
 ## Guidelines
 
