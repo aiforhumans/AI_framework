@@ -1,31 +1,8 @@
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 from pydantic import BaseModel
 import asyncio
 import httpx
 
-from app.config import (
-    LMSTUDIO_BASE_URL,
-    LMSTUDIO_CHAT_COMPLETIONS,
-    LMSTUDIO_MODELS,
-    DEFAULT_MAX_TOKENS,
-    DEFAULT_TEMPERATURE,
-    DEFAULT_TIMEOUT,
-    STREAMING_TIMEOUT,
-)
-from app.schemas.requests import (
-    GenerateRequest, ChatMessage, ChatRequest, PromptGeneratorRequest,
-    ToolCreateRequest, ToolUpdateRequest,
-    PromptTemplateCreateRequest, PromptTemplateUpdateRequest,
-    ABTestRequest,
-    DatasetCreateRequest, DatasetUpdateRequest,
-    CustomEvaluatorCreateRequest, CustomEvaluatorUpdateRequest,
-    EvalJobCreateRequest, BulkRunRequest,
-    WorkflowCreateRequest, WorkflowUpdateRequest,
-    GuardrailRuleCreateRequest, GuardrailRuleUpdateRequest,
-    GuardrailTestCreateRequest, GuardrailTestUpdateRequest, GuardrailCheckRequest,
-    ChatTreeCreateRequest, ChatTreeUpdateRequest, ChatMessageRequest, ChatBranchRequest,
-    HistoryUpdateRequest, HistoryFilterRequest, ReplayRequest,
-)
 from app.models.tools_store import ToolStore, ToolConfig
 from app.models.prompt_templates_store import PromptTemplateStore, PromptTemplate
 from app.models.eval_store import DatasetStore, Dataset, CustomEvaluatorStore, CustomEvaluator, EvalJobStore, EvalJob
@@ -34,19 +11,6 @@ from app.models.workflow_store import (
     WorkflowStore, Workflow, WorkflowNode, WorkflowEdge,
     WorkflowRunStore, WorkflowRun, WorkflowStepResult
 )
-from app.models.metrics_store import (
-    MetricsStore, MetricEntry, MetricsSummary, 
-    ModelMetrics, EndpointMetrics, HourlyMetrics
-)
-from app.models.guardrail_store import (
-    GuardrailStore, GuardrailRule, GuardrailTestStore, GuardrailTest,
-    GuardrailEngine, GuardrailTestResult
-)
-from app.models.chat_lab_store import (
-    ChatLabStore, ConversationTree, ConversationNode, 
-    ChatMessage as ChatLabMessage
-)
-from app.models.history_store import HistoryStore, HistoryEntry, HistoryFilter
 
 
 class AgentConfig(BaseModel):
@@ -56,12 +20,38 @@ class AgentConfig(BaseModel):
     name: str
     model_name: str
     instructions: str
-    max_tokens: int = DEFAULT_MAX_TOKENS
-    temperature: float = DEFAULT_TEMPERATURE
+    max_tokens: int = 256
+    temperature: float = 0.7
+
+
+class GenerateRequest(BaseModel):
+    agent_id: Optional[str] = None
+    model_name: Optional[str] = None
+    prompt: str
+    max_tokens: Optional[int] = None
+    temperature: Optional[float] = None
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    agent_id: Optional[str] = None
+    model_name: Optional[str] = None
+    messages: List[ChatMessage]
+    max_tokens: Optional[int] = None
+    temperature: Optional[float] = None
+    stream: bool = False
+    images: Optional[List[str]] = None  # Base64 encoded images
+
+
+class PromptGeneratorRequest(BaseModel):
+    input: str
 
 
 class GenerateResponse(BaseModel):
-    """Response from text generation."""
     agent_id: Optional[str]
     agent_name: Optional[str]
     model_name: str
@@ -69,6 +59,122 @@ class GenerateResponse(BaseModel):
     system_instructions: str
     response: str
     latency_ms: float
+
+
+class ToolCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    input_schema: dict = {}
+    endpoint: str = ""
+    enabled: bool = True
+    models: List[str] = []
+    agents: List[str] = []
+
+
+class ToolUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    input_schema: Optional[dict] = None
+    endpoint: Optional[str] = None
+    enabled: Optional[bool] = None
+    models: Optional[List[str]] = None
+    agents: Optional[List[str]] = None
+
+
+class PromptTemplateCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    system_prompt: str = ""
+    user_prompt: str = ""
+    variables: List[str] = []
+
+
+class PromptTemplateUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    system_prompt: Optional[str] = None
+    user_prompt: Optional[str] = None
+    variables: Optional[List[str]] = None
+
+
+class ABTestRequest(BaseModel):
+    prompt: str
+    system_prompt: str = ""
+    variants: List[dict]  # each: {"model_name": str} or {"agent_id": str}
+    max_tokens: Optional[int] = 256
+    temperature: Optional[float] = 0.7
+
+
+# --- Evaluation Request Models ---
+
+class DatasetCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    rows: List[dict] = []  # each: {"query": str, "response": str, "ground_truth": str}
+
+
+class DatasetUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    rows: Optional[List[dict]] = None
+
+
+class CustomEvaluatorCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    evaluator_type: str  # "llm" or "code"
+    llm_prompt: str = ""
+    code: str = ""
+
+
+class CustomEvaluatorUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    llm_prompt: Optional[str] = None
+    code: Optional[str] = None
+
+
+class EvalJobCreateRequest(BaseModel):
+    name: str
+    dataset_id: int
+    evaluator_ids: List[str]  # e.g., ["builtin:f1_score", "custom:1"]
+    model_name: Optional[str] = None
+    agent_id: Optional[str] = None
+
+
+class BulkRunRequest(BaseModel):
+    dataset_id: int
+    model_name: Optional[str] = None
+    agent_id: Optional[str] = None
+    max_tokens: Optional[int] = 256
+    temperature: Optional[float] = 0.7
+
+
+# --- Workflow Request Models ---
+
+class WorkflowCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    nodes: List[dict] = []
+    edges: List[dict] = []
+    entry_node: Optional[str] = None
+
+
+class WorkflowUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    nodes: Optional[List[dict]] = None
+    edges: Optional[List[dict]] = None
+    entry_node: Optional[str] = None
+
+
+class WorkflowRunRequest(BaseModel):
+    input_text: str
+
+
+LMSTUDIO_BASE_URL = "http://127.0.0.1:1234/v1"
+LMSTUDIO_CHAT_COMPLETIONS = f"{LMSTUDIO_BASE_URL}/chat/completions"
+LMSTUDIO_MODELS = f"{LMSTUDIO_BASE_URL}/models/"
 
 
 class LocalLLMService:
@@ -116,20 +222,11 @@ class LocalLLMService:
         # Workflow stores for Agent Orchestrator
         self._workflow_store = WorkflowStore()
         self._workflow_run_store = WorkflowRunStore()
-        # Metrics store for Latency Dashboard
-        self._metrics_store = MetricsStore()
-        # Guardrail stores for safety testing
-        self._guardrail_store = GuardrailStore()
-        self._guardrail_test_store = GuardrailTestStore()
-        # Chat Lab store for multi-turn branching conversations
-        self._chat_lab_store = ChatLabStore()
-        # History store for request/response logging
-        self._history_store = HistoryStore()
 
     async def refresh_models(self) -> List[str]:
         """Fetch available models from LM Studio's /models/ endpoint."""
 
-        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(LMSTUDIO_MODELS)
             resp.raise_for_status()
             data = resp.json()
@@ -189,13 +286,8 @@ class LocalLLMService:
 
     # Prompt template helpers
 
-    def list_prompt_templates(self, category: str = None, include_presets: bool = True) -> List[PromptTemplate]:
-        if category:
-            return self._prompt_template_store.list_by_category(category)
-        return self._prompt_template_store.list_templates(include_presets=include_presets)
-
-    def get_prompt_template(self, template_id: int) -> Optional[PromptTemplate]:
-        return self._prompt_template_store.get_template(template_id)
+    def list_prompt_templates(self) -> List[PromptTemplate]:
+        return self._prompt_template_store.list_templates()
 
     def create_prompt_template(self, request: PromptTemplateCreateRequest) -> PromptTemplate:
         template = PromptTemplate(
@@ -241,75 +333,21 @@ class LocalLLMService:
             messages.append({"role": "system", "content": system_instructions})
         messages.append({"role": "user", "content": request.prompt})
 
-        prompt_length = len(request.prompt) + len(system_instructions)
-        error_msg = None
-        content = ""
-        prompt_tokens = 0
-        completion_tokens = 0
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                LMSTUDIO_CHAT_COMPLETIONS,
+                json={
+                    "model": model_name,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
-        try:
-            async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
-                resp = await client.post(
-                    LMSTUDIO_CHAT_COMPLETIONS,
-                    json={
-                        "model": model_name,
-                        "messages": messages,
-                        "max_tokens": max_tokens,
-                        "temperature": temperature,
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-
-            content = data["choices"][0]["message"]["content"]
-            
-            # Extract token usage if available
-            usage = data.get("usage", {})
-            prompt_tokens = usage.get("prompt_tokens", 0)
-            completion_tokens = usage.get("completion_tokens", 0)
-            
-        except Exception as e:
-            error_msg = str(e)
-            
+        content = data["choices"][0]["message"]["content"]
         end = asyncio.get_event_loop().time()
-        latency_ms = (end - start) * 1000.0
-
-        # Record metrics
-        self._metrics_store.record(
-            endpoint="/api/generate",
-            model_name=model_name,
-            latency_ms=latency_ms,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            prompt_length=prompt_length,
-            response_length=len(content),
-            max_tokens_requested=max_tokens,
-            temperature=temperature,
-            agent_id=agent.id if agent else None,
-            agent_name=agent.name if agent else None,
-            success=error_msg is None,
-            error=error_msg,
-        )
-
-        # Record history
-        self._history_store.record(
-            endpoint="generate",
-            model=model_name,
-            agent_id=agent.id if agent else None,
-            prompt=request.prompt,
-            system_prompt=system_instructions,
-            parameters={"max_tokens": max_tokens, "temperature": temperature},
-            response=content,
-            error=error_msg,
-            latency_ms=latency_ms,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=prompt_tokens + completion_tokens,
-            success=error_msg is None,
-        )
-
-        if error_msg:
-            raise Exception(error_msg)
 
         return GenerateResponse(
             agent_id=agent.id if agent else None,
@@ -318,7 +356,7 @@ class LocalLLMService:
             prompt=request.prompt,
             system_instructions=system_instructions,
             response=content,
-            latency_ms=latency_ms,
+            latency_ms=(end - start) * 1000.0,
         )
 
     async def chat(self, request: ChatRequest) -> dict:
@@ -333,85 +371,29 @@ class LocalLLMService:
 
         # Convert messages to API format
         messages = [{"role": m.role, "content": m.content} for m in request.messages]
-        prompt_length = sum(len(m.content) for m in request.messages)
 
         start = asyncio.get_event_loop().time()
-        error_msg = None
-        content = ""
-        prompt_tokens = 0
-        completion_tokens = 0
 
-        try:
-            async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
-                resp = await client.post(
-                    LMSTUDIO_CHAT_COMPLETIONS,
-                    json={
-                        "model": model_name,
-                        "messages": messages,
-                        "max_tokens": max_tokens,
-                        "temperature": temperature,
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                LMSTUDIO_CHAT_COMPLETIONS,
+                json={
+                    "model": model_name,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
-            content = data["choices"][0]["message"]["content"]
-            # Extract token usage if available
-            usage = data.get("usage", {})
-            prompt_tokens = usage.get("prompt_tokens", 0)
-            completion_tokens = usage.get("completion_tokens", 0)
-        except Exception as e:
-            error_msg = str(e)
-
+        content = data["choices"][0]["message"]["content"]
         end = asyncio.get_event_loop().time()
-        latency_ms = round((end - start) * 1000.0, 1)
-
-        # Record metrics
-        self._metrics_store.record(
-            endpoint="chat",
-            model_name=model_name,
-            latency_ms=latency_ms,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            prompt_length=prompt_length,
-            response_length=len(content),
-            max_tokens_requested=max_tokens,
-            temperature=temperature,
-            agent_id=request.agent_id,
-            agent_name=agent.name if agent else None,
-            success=error_msg is None,
-            error=error_msg,
-        )
-
-        # Record history
-        self._history_store.record(
-            endpoint="chat",
-            model=model_name,
-            agent_id=request.agent_id,
-            messages=messages,
-            parameters={"max_tokens": max_tokens, "temperature": temperature},
-            response=content,
-            error=error_msg,
-            latency_ms=latency_ms,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=prompt_tokens + completion_tokens,
-            success=error_msg is None,
-        )
-
-        if error_msg:
-            return {
-                "response": f"Error: {error_msg}",
-                "model_name": model_name,
-                "latency_ms": latency_ms,
-            }
 
         return {
             "response": content,
             "model_name": model_name,
-            "latency_ms": latency_ms,
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
+            "latency_ms": round((end - start) * 1000.0, 1),
         }
 
     async def chat_stream(self, request: ChatRequest):
@@ -428,7 +410,7 @@ class LocalLLMService:
 
         start = asyncio.get_event_loop().time()
 
-        async with httpx.AsyncClient(timeout=STREAMING_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
                 "POST",
                 LMSTUDIO_CHAT_COMPLETIONS,
@@ -509,7 +491,7 @@ The final prompt you output should adhere to the following structure below. Do n
 
         model_name = self._models[0] if self._models else "unknown"
 
-        async with httpx.AsyncClient(timeout=STREAMING_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(
                 LMSTUDIO_CHAT_COMPLETIONS,
                 json={
@@ -548,15 +530,9 @@ The final prompt you output should adhere to the following structure below. Do n
                 messages.append({"role": "system", "content": effective_system})
             messages.append({"role": "user", "content": request.prompt})
 
-            prompt_length = len(request.prompt) + len(effective_system)
             start = asyncio.get_event_loop().time()
-            content = ""
-            error = None
-            prompt_tokens = 0
-            completion_tokens = 0
-
             try:
-                async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
+                async with httpx.AsyncClient(timeout=60.0) as client:
                     resp = await client.post(
                         LMSTUDIO_CHAT_COMPLETIONS,
                         json={
@@ -569,33 +545,11 @@ The final prompt you output should adhere to the following structure below. Do n
                     resp.raise_for_status()
                     data = resp.json()
                 content = data["choices"][0]["message"]["content"]
-                
-                # Extract token usage
-                usage = data.get("usage", {})
-                prompt_tokens = usage.get("prompt_tokens", 0)
-                completion_tokens = usage.get("completion_tokens", 0)
+                error = None
             except Exception as e:
+                content = ""
                 error = str(e)
-
             end = asyncio.get_event_loop().time()
-            latency_ms = (end - start) * 1000.0
-
-            # Record metrics
-            self._metrics_store.record(
-                endpoint="/api/ab-test",
-                model_name=effective_model,
-                latency_ms=latency_ms,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                prompt_length=prompt_length,
-                response_length=len(content),
-                max_tokens_requested=max_tokens,
-                temperature=temperature,
-                agent_id=agent_id,
-                agent_name=agent.name if agent else None,
-                success=error is None,
-                error=error,
-            )
 
             return {
                 "variant": variant,
@@ -604,7 +558,7 @@ The final prompt you output should adhere to the following structure below. Do n
                 "agent_name": agent.name if agent else None,
                 "response": content,
                 "error": error,
-                "latency_ms": latency_ms,
+                "latency_ms": (end - start) * 1000.0,
             }
 
         results = await asyncio.gather(*[run_variant(v) for v in request.variants])
@@ -708,7 +662,7 @@ The final prompt you output should adhere to the following structure below. Do n
             messages.append({"role": "user", "content": row.query})
 
             try:
-                async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
+                async with httpx.AsyncClient(timeout=60.0) as client:
                     resp = await client.post(
                         LMSTUDIO_CHAT_COMPLETIONS,
                         json={
@@ -767,15 +721,8 @@ The final prompt you output should adhere to the following structure below. Do n
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": row.query})
 
-            prompt_length = len(row.query) + len(system_prompt)
-            start = asyncio.get_event_loop().time()
-            response = ""
-            error = None
-            prompt_tokens = 0
-            completion_tokens = 0
-
             try:
-                async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
+                async with httpx.AsyncClient(timeout=60.0) as client:
                     resp = await client.post(
                         LMSTUDIO_CHAT_COMPLETIONS,
                         json={
@@ -788,34 +735,10 @@ The final prompt you output should adhere to the following structure below. Do n
                     resp.raise_for_status()
                     data = resp.json()
                 response = data["choices"][0]["message"]["content"]
-                
-                # Extract token usage
-                usage = data.get("usage", {})
-                prompt_tokens = usage.get("prompt_tokens", 0)
-                completion_tokens = usage.get("completion_tokens", 0)
+                error = None
             except Exception as e:
                 response = f"[Error: {str(e)}]"
                 error = str(e)
-
-            end = asyncio.get_event_loop().time()
-            latency_ms = (end - start) * 1000.0
-
-            # Record metrics
-            self._metrics_store.record(
-                endpoint="/api/bulk-generate",
-                model_name=model_name,
-                latency_ms=latency_ms,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                prompt_length=prompt_length,
-                response_length=len(response),
-                max_tokens_requested=max_tokens,
-                temperature=temperature,
-                agent_id=request.agent_id,
-                agent_name=agent.name if agent else None,
-                success=error is None,
-                error=error,
-            )
 
             updated_rows.append({
                 "query": row.query,
@@ -936,7 +859,7 @@ The final prompt you output should adhere to the following structure below. Do n
 
         try:
             model_name = self._models[0] if self._models else "unknown"
-            async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(
                     LMSTUDIO_CHAT_COMPLETIONS,
                     json={
@@ -1155,7 +1078,6 @@ The final prompt you output should adhere to the following structure below. Do n
         temperature = config.get("temperature", 0.7)
 
         # Resolve agent if specified
-        agent = None
         if agent_id:
             agent = self.get_agent(agent_id)
             if agent:
@@ -1173,60 +1095,20 @@ The final prompt you output should adhere to the following structure below. Do n
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": input_text})
 
-        prompt_length = len(input_text) + len(system_prompt)
-        start = asyncio.get_event_loop().time()
-        content = ""
-        error_msg = None
-        prompt_tokens = 0
-        completion_tokens = 0
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                LMSTUDIO_CHAT_COMPLETIONS,
+                json={
+                    "model": model_name,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
-        try:
-            async with httpx.AsyncClient(timeout=STREAMING_TIMEOUT) as client:
-                resp = await client.post(
-                    LMSTUDIO_CHAT_COMPLETIONS,
-                    json={
-                        "model": model_name,
-                        "messages": messages,
-                        "max_tokens": max_tokens,
-                        "temperature": temperature,
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-
-            content = data["choices"][0]["message"]["content"]
-            
-            # Extract token usage
-            usage = data.get("usage", {})
-            prompt_tokens = usage.get("prompt_tokens", 0)
-            completion_tokens = usage.get("completion_tokens", 0)
-        except Exception as e:
-            error_msg = str(e)
-
-        end = asyncio.get_event_loop().time()
-        latency_ms = (end - start) * 1000.0
-
-        # Record metrics
-        self._metrics_store.record(
-            endpoint="/api/workflow",
-            model_name=model_name,
-            latency_ms=latency_ms,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            prompt_length=prompt_length,
-            response_length=len(content),
-            max_tokens_requested=max_tokens,
-            temperature=temperature,
-            agent_id=agent_id,
-            agent_name=agent.name if agent else None,
-            success=error_msg is None,
-            error=error_msg,
-        )
-
-        if error_msg:
-            raise Exception(error_msg)
-
-        return content
+        return data["choices"][0]["message"]["content"]
 
     def _execute_condition_node(self, config: dict, input_text: str) -> str:
         """Evaluate a condition and return 'true' or 'false'."""
@@ -1266,525 +1148,3 @@ The final prompt you output should adhere to the following structure below. Do n
         output = output.replace("{{prev_output}}", current_input)
         
         return output
-
-    # --- Metrics API ---
-
-    def get_metrics_summary(self, hours: int = 24) -> MetricsSummary:
-        """Get aggregated metrics summary."""
-        return self._metrics_store.get_summary(hours)
-
-    def get_metrics_list(self, limit: int = 100, offset: int = 0) -> List[MetricEntry]:
-        """Get recent metrics list."""
-        return self._metrics_store.list_all(limit, offset)
-
-    def get_metrics_by_model(self, hours: int = 24) -> List[ModelMetrics]:
-        """Get metrics grouped by model."""
-        return self._metrics_store.get_model_breakdown(hours)
-
-    def get_metrics_by_endpoint(self, hours: int = 24) -> List[EndpointMetrics]:
-        """Get metrics grouped by endpoint."""
-        return self._metrics_store.get_endpoint_breakdown(hours)
-
-    def get_metrics_hourly(self, hours: int = 24) -> List[HourlyMetrics]:
-        """Get hourly metrics breakdown."""
-        return self._metrics_store.get_hourly_breakdown(hours)
-
-    def clear_metrics(self):
-        """Clear all metrics data."""
-        self._metrics_store.clear()
-
-    def get_metrics_count(self) -> int:
-        """Get total metrics count."""
-        return self._metrics_store.count()
-
-    # --- Guardrail API ---
-
-    def list_guardrail_rules(self) -> List[GuardrailRule]:
-        """List all guardrail rules."""
-        return self._guardrail_store.list_all()
-
-    def get_guardrail_rule(self, rule_id: int) -> Optional[GuardrailRule]:
-        """Get a specific guardrail rule."""
-        return self._guardrail_store.get(rule_id)
-
-    def create_guardrail_rule(self, request: GuardrailRuleCreateRequest) -> GuardrailRule:
-        """Create a new guardrail rule."""
-        return self._guardrail_store.create(
-            name=request.name,
-            type=request.type,
-            config=request.config,
-            description=request.description,
-            enabled=request.enabled,
-        )
-
-    def update_guardrail_rule(self, rule_id: int, request: GuardrailRuleUpdateRequest) -> Optional[GuardrailRule]:
-        """Update a guardrail rule."""
-        updates = {}
-        if request.name is not None:
-            updates["name"] = request.name
-        if request.type is not None:
-            updates["type"] = request.type
-        if request.config is not None:
-            updates["config"] = request.config
-        if request.description is not None:
-            updates["description"] = request.description
-        if request.enabled is not None:
-            updates["enabled"] = request.enabled
-        return self._guardrail_store.update(rule_id, **updates)
-
-    def delete_guardrail_rule(self, rule_id: int) -> bool:
-        """Delete a guardrail rule."""
-        return self._guardrail_store.delete(rule_id)
-
-    def toggle_guardrail_rule(self, rule_id: int) -> Optional[GuardrailRule]:
-        """Toggle a guardrail rule's enabled status."""
-        return self._guardrail_store.toggle(rule_id)
-
-    def list_guardrail_tests(self) -> List[GuardrailTest]:
-        """List all guardrail test cases."""
-        return self._guardrail_test_store.list_all()
-
-    def get_guardrail_test(self, test_id: int) -> Optional[GuardrailTest]:
-        """Get a specific guardrail test case."""
-        return self._guardrail_test_store.get(test_id)
-
-    def create_guardrail_test(self, request: GuardrailTestCreateRequest) -> GuardrailTest:
-        """Create a new guardrail test case."""
-        return self._guardrail_test_store.create(
-            name=request.name,
-            input_text=request.input_text,
-            expected_blocked=request.expected_blocked,
-            expected_flags=request.expected_flags,
-            description=request.description,
-            tags=request.tags,
-        )
-
-    def update_guardrail_test(self, test_id: int, request: GuardrailTestUpdateRequest) -> Optional[GuardrailTest]:
-        """Update a guardrail test case."""
-        updates = {}
-        if request.name is not None:
-            updates["name"] = request.name
-        if request.input_text is not None:
-            updates["input_text"] = request.input_text
-        if request.expected_blocked is not None:
-            updates["expected_blocked"] = request.expected_blocked
-        if request.expected_flags is not None:
-            updates["expected_flags"] = request.expected_flags
-        if request.description is not None:
-            updates["description"] = request.description
-        if request.tags is not None:
-            updates["tags"] = request.tags
-        return self._guardrail_test_store.update(test_id, **updates)
-
-    def delete_guardrail_test(self, test_id: int) -> bool:
-        """Delete a guardrail test case."""
-        return self._guardrail_test_store.delete(test_id)
-
-    def check_guardrails(self, request: GuardrailCheckRequest) -> GuardrailTestResult:
-        """Run guardrail checks on input text."""
-        if request.rule_ids:
-            rules = [self._guardrail_store.get(rid) for rid in request.rule_ids]
-            rules = [r for r in rules if r is not None]
-        else:
-            rules = self._guardrail_store.list_enabled()
-        
-        return GuardrailEngine.check_text(request.text, rules)
-
-    def run_guardrail_test_suite(self, rule_ids: Optional[List[int]] = None, 
-                                  test_ids: Optional[List[int]] = None) -> Dict[str, Any]:
-        """Run guardrail test suite and return results."""
-        # Get rules to test
-        if rule_ids:
-            rules = [self._guardrail_store.get(rid) for rid in rule_ids]
-            rules = [r for r in rules if r is not None]
-        else:
-            rules = self._guardrail_store.list_enabled()
-        
-        # Get test cases
-        if test_ids:
-            tests = [self._guardrail_test_store.get(tid) for tid in test_ids]
-            tests = [t for t in tests if t is not None]
-        else:
-            tests = self._guardrail_test_store.list_all()
-        
-        results = []
-        passed = 0
-        failed = 0
-        
-        for test in tests:
-            result = GuardrailEngine.check_text(test.input_text, rules)
-            
-            # Check if result matches expectations
-            block_match = result.blocked == test.expected_blocked
-            
-            # Check if expected flags were triggered
-            triggered_names = [f["rule_name"] for f in result.flags]
-            flags_match = all(ef in triggered_names for ef in test.expected_flags)
-            
-            test_passed = block_match and flags_match
-            
-            if test_passed:
-                passed += 1
-            else:
-                failed += 1
-            
-            results.append({
-                "test_id": test.id,
-                "test_name": test.name,
-                "input_text": test.input_text[:100] + "..." if len(test.input_text) > 100 else test.input_text,
-                "expected_blocked": test.expected_blocked,
-                "actual_blocked": result.blocked,
-                "expected_flags": test.expected_flags,
-                "actual_flags": triggered_names,
-                "passed": test_passed,
-                "block_match": block_match,
-                "flags_match": flags_match,
-                "execution_time_ms": result.execution_time_ms,
-                "details": result.flags,
-            })
-        
-        return {
-            "total": len(tests),
-            "passed": passed,
-            "failed": failed,
-            "pass_rate": (passed / len(tests) * 100) if tests else 0,
-            "rules_tested": [r.name for r in rules],
-            "results": results,
-        }
-
-    # -------------------------------------------------------------------------
-    # Chat Lab Methods (Multi-Turn Branching Conversations)
-    # -------------------------------------------------------------------------
-    
-    def list_chat_trees(self) -> List[ConversationTree]:
-        """List all conversation trees."""
-        return self._chat_lab_store.list_trees()
-    
-    def get_chat_tree(self, tree_id: int) -> Optional[ConversationTree]:
-        """Get a specific conversation tree."""
-        return self._chat_lab_store.get_tree(tree_id)
-    
-    def create_chat_tree(self, request: ChatTreeCreateRequest) -> ConversationTree:
-        """Create a new conversation tree."""
-        return self._chat_lab_store.create_tree(
-            name=request.name,
-            description=request.description,
-            model_name=request.model_name,
-            system_prompt=request.system_prompt
-        )
-    
-    def update_chat_tree(self, tree_id: int, request: ChatTreeUpdateRequest) -> Optional[ConversationTree]:
-        """Update conversation tree metadata."""
-        updates = {}
-        if request.name is not None:
-            updates["name"] = request.name
-        if request.description is not None:
-            updates["description"] = request.description
-        if request.model_name is not None:
-            updates["model_name"] = request.model_name
-        if request.system_prompt is not None:
-            updates["system_prompt"] = request.system_prompt
-        return self._chat_lab_store.update_tree(tree_id, **updates)
-    
-    def delete_chat_tree(self, tree_id: int) -> bool:
-        """Delete a conversation tree."""
-        return self._chat_lab_store.delete_tree(tree_id)
-    
-    def get_chat_tree_structure(self, tree_id: int) -> Dict:
-        """Get tree structure for visualization."""
-        return self._chat_lab_store.get_tree_structure(tree_id)
-    
-    def get_chat_history(self, tree_id: int, node_id: str = None) -> List[ChatLabMessage]:
-        """Get conversation history up to a specific node."""
-        return self._chat_lab_store.get_conversation_history(tree_id, node_id)
-    
-    async def send_chat_message(self, tree_id: int, request: ChatMessageRequest) -> Dict:
-        """Send a user message and get assistant response."""
-        import time
-        
-        tree = self._chat_lab_store.get_tree(tree_id)
-        if not tree:
-            return {"error": "Conversation tree not found"}
-        
-        # Add user message
-        user_node = self._chat_lab_store.add_message(
-            tree_id=tree_id,
-            role="user",
-            content=request.content,
-            parent_node_id=request.parent_node_id
-        )
-        
-        if not user_node:
-            return {"error": "Failed to add user message"}
-        
-        # Build conversation history for LLM
-        history = self._chat_lab_store.get_conversation_history(tree_id)
-        messages = []
-        
-        # Add system prompt if set
-        if tree.system_prompt:
-            messages.append({"role": "system", "content": tree.system_prompt})
-        
-        # Add conversation history
-        for msg in history:
-            messages.append({"role": msg.role, "content": msg.content})
-        
-        # Call LLM
-        model_name = tree.model_name or (self._models[0] if self._models else None)
-        if not model_name:
-            return {"error": "No model available"}
-        
-        start_time = time.time()
-        try:
-            async with httpx.AsyncClient(timeout=STREAMING_TIMEOUT) as client:
-                payload = {
-                    "model": model_name,
-                    "messages": messages,
-                    "max_tokens": 1024,
-                    "temperature": 0.7,
-                    "stream": False
-                }
-                
-                resp = await client.post(LMSTUDIO_CHAT_COMPLETIONS, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-            
-            latency_ms = (time.time() - start_time) * 1000
-            
-            # Extract response
-            assistant_content = data["choices"][0]["message"]["content"]
-            usage = data.get("usage", {})
-            
-            # Add assistant message
-            assistant_node = self._chat_lab_store.add_message(
-                tree_id=tree_id,
-                role="assistant",
-                content=assistant_content,
-                metadata={
-                    "latency_ms": latency_ms,
-                    "model": model_name,
-                    "prompt_tokens": usage.get("prompt_tokens"),
-                    "completion_tokens": usage.get("completion_tokens"),
-                    "total_tokens": usage.get("total_tokens"),
-                }
-            )
-            
-            # Record metrics
-            self._metrics_store.record(
-                endpoint="chat_lab",
-                model=model_name,
-                latency_ms=latency_ms,
-                prompt_tokens=usage.get("prompt_tokens", 0),
-                completion_tokens=usage.get("completion_tokens", 0),
-                success=True
-            )
-            
-            return {
-                "user_node": user_node.model_dump(),
-                "assistant_node": assistant_node.model_dump() if assistant_node else None,
-                "response": assistant_content,
-                "latency_ms": latency_ms,
-                "model": model_name,
-            }
-            
-        except Exception as e:
-            latency_ms = (time.time() - start_time) * 1000
-            self._metrics_store.record(
-                endpoint="chat_lab",
-                model=model_name,
-                latency_ms=latency_ms,
-                prompt_tokens=0,
-                completion_tokens=0,
-                success=False
-            )
-            return {"error": str(e), "user_node": user_node.model_dump()}
-    
-    def create_chat_branch(self, tree_id: int, request: ChatBranchRequest) -> Dict:
-        """Create a new branch from a specific node."""
-        result = self._chat_lab_store.create_branch(
-            tree_id=tree_id,
-            from_node_id=request.from_node_id,
-            branch_name=request.branch_name
-        )
-        if result:
-            return {"success": True, "branch_point": result}
-        return {"success": False, "error": "Failed to create branch"}
-    
-    def switch_chat_branch(self, tree_id: int, to_node_id: str) -> Dict:
-        """Switch active path to include a specific node."""
-        success = self._chat_lab_store.switch_branch(tree_id, to_node_id)
-        return {"success": success}
-    
-    def delete_chat_node(self, tree_id: int, node_id: str) -> Dict:
-        """Delete a node and all its descendants."""
-        success = self._chat_lab_store.delete_node(tree_id, node_id)
-        return {"success": success}
-    
-    # -------------------------------------------------------------------------
-    # History & Replay Methods
-    # -------------------------------------------------------------------------
-    
-    def list_history(self, filter_req: HistoryFilterRequest = None, 
-                     limit: int = 100, offset: int = 0) -> List[HistoryEntry]:
-        """List history entries with optional filtering."""
-        filter_obj = None
-        if filter_req:
-            filter_obj = HistoryFilter(
-                endpoint=filter_req.endpoint,
-                model=filter_req.model,
-                success=filter_req.success,
-                starred=filter_req.starred,
-                tags=filter_req.tags,
-                from_timestamp=filter_req.from_timestamp,
-                to_timestamp=filter_req.to_timestamp,
-                search=filter_req.search
-            )
-        return self._history_store.list(filter_obj, limit, offset)
-    
-    def get_history_entry(self, entry_id: int) -> Optional[HistoryEntry]:
-        """Get a specific history entry."""
-        return self._history_store.get(entry_id)
-    
-    def update_history_entry(self, entry_id: int, 
-                              request: HistoryUpdateRequest) -> Optional[HistoryEntry]:
-        """Update a history entry (notes, tags, starred)."""
-        updates = {}
-        if request.notes is not None:
-            updates["notes"] = request.notes
-        if request.tags is not None:
-            updates["tags"] = request.tags
-        if request.starred is not None:
-            updates["starred"] = request.starred
-        return self._history_store.update(entry_id, **updates)
-    
-    def delete_history_entry(self, entry_id: int) -> bool:
-        """Delete a history entry."""
-        return self._history_store.delete(entry_id)
-    
-    def clear_history(self, keep_starred: bool = True) -> int:
-        """Clear history entries."""
-        return self._history_store.clear(keep_starred)
-    
-    def get_history_stats(self) -> Dict[str, Any]:
-        """Get history statistics."""
-        return self._history_store.get_stats()
-    
-    def get_history_endpoints(self) -> List[str]:
-        """Get list of unique endpoints."""
-        return self._history_store.get_endpoints()
-    
-    def get_history_models(self) -> List[str]:
-        """Get list of unique models used."""
-        return self._history_store.get_models()
-    
-    async def replay_request(self, request: ReplayRequest) -> Dict[str, Any]:
-        """Replay a historical request."""
-        import time
-        
-        entry = self._history_store.get(request.entry_id)
-        if not entry:
-            return {"error": "History entry not found"}
-        
-        # Use override model or original
-        model = request.override_model or entry.model
-        if not model:
-            return {"error": "No model specified"}
-        
-        # Build parameters
-        params = entry.parameters.copy()
-        if request.override_parameters:
-            params.update(request.override_parameters)
-        
-        start_time = time.time()
-        
-        try:
-            async with httpx.AsyncClient(timeout=STREAMING_TIMEOUT) as client:
-                # Build the request based on endpoint type
-                if entry.messages:
-                    # Chat-style request
-                    messages = entry.messages.copy()
-                    if entry.system_prompt:
-                        messages.insert(0, {"role": "system", "content": entry.system_prompt})
-                    
-                    payload = {
-                        "model": model,
-                        "messages": messages,
-                        "max_tokens": params.get("max_tokens", 1024),
-                        "temperature": params.get("temperature", 0.7),
-                        "stream": False
-                    }
-                else:
-                    # Generate-style request
-                    messages = []
-                    if entry.system_prompt:
-                        messages.append({"role": "system", "content": entry.system_prompt})
-                    if entry.prompt:
-                        messages.append({"role": "user", "content": entry.prompt})
-                    
-                    payload = {
-                        "model": model,
-                        "messages": messages,
-                        "max_tokens": params.get("max_tokens", 1024),
-                        "temperature": params.get("temperature", 0.7),
-                        "stream": False
-                    }
-                
-                resp = await client.post(LMSTUDIO_CHAT_COMPLETIONS, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-            
-            latency_ms = (time.time() - start_time) * 1000
-            response_text = data["choices"][0]["message"]["content"]
-            usage = data.get("usage", {})
-            
-            # Record this replay as a new history entry
-            self._history_store.record(
-                endpoint="replay",
-                model=model,
-                prompt=entry.prompt,
-                system_prompt=entry.system_prompt,
-                messages=entry.messages,
-                parameters=params,
-                response=response_text,
-                latency_ms=latency_ms,
-                prompt_tokens=usage.get("prompt_tokens"),
-                completion_tokens=usage.get("completion_tokens"),
-                total_tokens=usage.get("total_tokens"),
-                success=True,
-                tags=["replay", f"original:{entry.id}"]
-            )
-            
-            # Record metrics
-            self._metrics_store.record(
-                endpoint="replay",
-                model=model,
-                latency_ms=latency_ms,
-                prompt_tokens=usage.get("prompt_tokens", 0),
-                completion_tokens=usage.get("completion_tokens", 0),
-                success=True
-            )
-            
-            return {
-                "original_entry_id": entry.id,
-                "response": response_text,
-                "original_response": entry.response,
-                "model": model,
-                "latency_ms": latency_ms,
-                "usage": usage,
-            }
-        
-        except Exception as e:
-            latency_ms = (time.time() - start_time) * 1000
-            self._metrics_store.record(
-                endpoint="replay",
-                model=model,
-                latency_ms=latency_ms,
-                prompt_tokens=0,
-                completion_tokens=0,
-                success=False
-            )
-            return {"error": str(e)}
-    
-    def record_history(self, **kwargs) -> HistoryEntry:
-        """Record a history entry (used by endpoints)."""
-        return self._history_store.record(**kwargs)
